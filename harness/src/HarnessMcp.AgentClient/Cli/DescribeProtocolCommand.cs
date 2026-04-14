@@ -56,13 +56,18 @@ public static class DescribeProtocolCommand
             {
                 "call plan-task before execution work begins",
                 "use the machine-readable result manifest instead of guessing artifact names",
-                "use the worker packet produced by the harness as the execution handoff"
+                "use the worker packet produced by the harness as the execution handoff",
+                "follow nextAction exactly as specified in the manifest",
+                "stop and fix errors when harness returns success=false"
             },
             ForbiddenAgentBehavior: new[]
             {
-                "do not skip harness planning",
-                "do not retrieve long-term memory independently during execution",
-                "do not generate a replacement plan outside the harness"
+                "do not skip harness planning for non-trivial tasks",
+                "do not begin coding or direct planning before harness success",
+                "do not retrieve long-term memory independently outside the harness flow",
+                "do not generate a replacement plan outside the harness",
+                "do not expand scope beyond the worker packet steps",
+                "do not reinterpret the task at the architecture level during execution"
             },
             SuccessExitMeaning: "Exit code 0 and manifest.Success=true",
             FailureExitMeaning: "Exit code non-zero and manifest.Success=false",

@@ -64,13 +64,14 @@ public sealed class PlanningSessionRunner
                 SessionId: sessionId,
                 TaskId: taskId,
                 NextAction: nextAction,
-                SessionJsonPath: sessionJsonPath,
+                OutputDirectory: _options.OutputDir,
                 ExecutionPlanMarkdownPath: executionPlanMarkdownPath,
                 WorkerPacketMarkdownPath: workerPacketMarkdownPath,
-                WorkerPacketText: workerPacketText,
-                UsedFallbackSearches: usedFallbackSearches,
+                SessionJsonPath: sessionJsonPath,
                 Warnings: warnings,
-                Errors: errors);
+                Errors: errors,
+                UsedFallbackSearches: usedFallbackSearches,
+                WorkerPacketText: workerPacketText);
 
             var json = JsonSerializer.Serialize(manifest, JsonHelpers.Default);
             await File.WriteAllTextAsync(manifestJsonPath, json, ct).ConfigureAwait(false);

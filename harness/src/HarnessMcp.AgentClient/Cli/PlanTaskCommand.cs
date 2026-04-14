@@ -11,7 +11,7 @@ public static class PlanTaskCommand
 {
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
-        var parsed = AgentClientOptionsLoader.Load(args);
+        var parsed = HarnessConfigLoader.LoadWithConfig(args);
         if (!parsed.IsSuccess)
         {
             foreach (var e in parsed.Errors) Console.Error.WriteLine(e);

@@ -39,6 +39,7 @@ $includeExtensions = @(
     ".targets",
     ".sln",
     ".md",
+    ".mdc",
     ".txt",
     ".json",
     ".ps1",

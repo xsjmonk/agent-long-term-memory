@@ -1,0 +1,45 @@
+# Harness Execution Rule
+
+## Scope
+
+This rule applies when the agent is operating from a worker packet produced by the harness. The worker packet is at the path given by `HarnessRunManifest.workerPacketMarkdownPath` (artifact `11-worker-packet.md`).
+
+## Mandatory Behavior
+
+When operating from a worker packet, the execution agent MUST:
+
+1. Execute the steps listed in the worker packet exactly as specified
+2. Produce per-step execution results (one section per step)
+3. Produce final deliverables matching the `Deliverables` listed in the worker packet
+4. Produce a validation summary (pass/fail against the `AcceptanceChecks` in each step)
+5. Report blocks instead of inventing behavior
+
+## Forbidden Behavior
+
+The execution agent MUST NOT:
+
+1. **Do not retrieve long-term memory independently.** All relevant knowledge has already been retrieved and distilled into the `KeyMemory` section of the worker packet. Do not call MCP memory tools.
+
+2. **Do not reinterpret the task at the architecture level.** The task interpretation is fixed in `RequirementIntent`. The execution agent operates within the defined scope.
+
+3. **Do not expand scope beyond the listed steps.** The steps in the worker packet define the complete execution scope. Do not add, remove, or reorder steps.
+
+4. **Do not generate a replacement plan.** The execution plan was synthesized by the harness. Do not replace it.
+
+5. **Do not change forbidden layers or components.** The `AllowedScope` section defines what the execution agent may modify. The `ForbiddenActions` section defines what it must not touch.
+
+6. **Do not modify hard constraints.** The `HardConstraints` in the worker packet are non-negotiable. If a constraint conflicts with a step, report the block.
+
+## Handling Blocks
+
+If a step is blocked by ambiguity, missing information, or a constraint conflict, the execution agent MUST:
+1. Report the block clearly
+2. Describe what information or decision is needed
+3. Do NOT invent a resolution
+
+## Output Requirements
+
+The execution agent MUST produce output in three sections:
+1. **Per-step execution results** - one section per step from the worker packet
+2. **Final deliverables** - matching the `Deliverables` listed in the worker packet
+3. **Validation summary** - pass/fail status for each `AcceptanceChecks` in each step

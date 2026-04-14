@@ -1,0 +1,54 @@
+# Harness Planning Rule
+
+## Trigger
+
+For any non-trivial implementation, refactor, debug, or design task, the planning agent MUST invoke the harness first. The end user is unaware of the harness.
+
+## Task Classification
+
+**Non-trivial (harness mandatory):**
+- Implementing a new feature or module
+- Refactoring existing code
+- Debugging a failure or error
+- Designing a system or component
+- Any task that requires understanding of project architecture, constraints, or existing patterns
+
+**Trivial (harness optional):**
+- Renaming a variable or function
+- Fixing a typo or formatting issue
+- Adding a comment or docstring
+- Changing a constant value
+- Any task that requires no architectural understanding
+
+When in doubt, treat the task as non-trivial and invoke the harness.
+
+## Mandatory Behavior
+
+When the task is non-trivial, the planning agent MUST:
+
+1. Invoke the harness via the hidden wrapper before any other action:
+   ```
+   Scripts\invoke-harness-plan.ps1 -TaskText "<USER_TASK>" -OutputDir "<SESSION_DIR>" -McpBaseUrl "<MCP_URL>" -ModelBaseUrl "<MODEL_URL>" -ModelName "<MODEL>"
+   ```
+2. Wait for harness success (`HarnessRunManifest.success == true`)
+3. Consume `HarnessRunManifest` as the authoritative result contract
+4. Read `executionPlanMarkdownPath` (artifact `10-execution-plan.md`) as the authoritative planning summary
+5. Read `workerPacketMarkdownPath` (artifact `11-worker-packet.md`) as the authoritative execution handoff
+6. Follow `nextAction` exactly from the manifest
+
+## Forbidden Behavior
+
+The planning agent MUST NOT:
+- Begin coding or direct planning before harness success
+- Skip the harness for non-trivial tasks
+- Retrieve long-term memory independently outside the harness flow
+- Generate a replacement plan instead of using the harness output
+- Use artifact paths not listed in `HarnessRunManifest`
+
+## Harness Success
+
+The harness succeeds when `HarnessRunManifest.success == true` and `nextAction == paste_worker_packet_into_execution_agent`. In this case, proceed to hand off the worker packet to the execution agent.
+
+## Failure Handling
+
+If `HarnessRunManifest.success == false`, stop immediately. Do not continue with speculative manual planning. Display the harness errors and require correction. See `01-harness-failure.mdc`.

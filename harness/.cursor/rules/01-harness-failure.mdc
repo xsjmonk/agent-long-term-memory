@@ -1,0 +1,47 @@
+# Harness Failure Rule
+
+## When Harness Fails
+
+The harness fails when `HarnessRunManifest.success == false` and `nextAction == fix_errors_and_rerun_harness`.
+
+## Mandatory Behavior
+
+When the harness fails, the planning agent MUST:
+
+1. Stop the planning flow immediately
+2. Display the harness error messages from `HarnessRunManifest.errors`
+3. Do NOT continue with speculative manual planning
+4. Do NOT attempt to "work around" the failure with ad-hoc planning
+5. Require the user to correct the inputs
+6. Rerun the harness after correction
+
+## Forbidden Behavior
+
+The planning agent MUST NOT:
+- Fall back to ordinary agent behavior when the harness fails
+- Attempt to complete the task without the harness after a harness failure
+- Silently ignore harness errors and proceed with execution work
+- Interpret a partial or ambiguous harness result as success
+- Modify the task description to make it "fit" a successful harness run
+
+## Error Categories
+
+**Task-level errors** (user must clarify):
+- Ambiguous task description
+- Missing domain or scope information
+- Contradictory requirements
+
+**Configuration errors** (operator must fix):
+- MCP server not reachable
+- Model endpoint not available
+- Missing API key
+
+**Runtime errors** (operator must retry):
+- Transient network failure
+- Model timeout
+
+For task-level errors, the planning agent MUST ask the user for clarification. For configuration or runtime errors, the planning agent MUST report the failure and require operator intervention.
+
+## Retry
+
+After correction, the planning agent MUST rerun the harness with the corrected inputs. Do not assume the fix without verification.

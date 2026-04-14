@@ -7,11 +7,12 @@ public sealed record HarnessRunManifest(
     string SessionId,
     string TaskId,
     string NextAction,
-    string SessionJsonPath,
+    string OutputDirectory,
     string ExecutionPlanMarkdownPath,
     string WorkerPacketMarkdownPath,
-    string? WorkerPacketText,
-    bool UsedFallbackSearches,
+    string SessionJsonPath,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    bool UsedFallbackSearches,
+    string? WorkerPacketText);
 
