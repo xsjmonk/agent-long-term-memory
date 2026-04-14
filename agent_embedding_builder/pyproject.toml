@@ -1,0 +1,40 @@
+[project]
+name = "agent-embedding-builder"
+version = "1.0.0"
+description = "Local-LLM embedding builder for retrieval-ready knowledge storage."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "pydantic>=2.7,<3",
+  "PyYAML>=6.0",
+  "jsonschema>=4.23",
+  "python-certifi-win32>=1.6; sys_platform == 'win32'",
+  "psycopg[binary]>=3.2",
+  "sentence-transformers>=3.0",
+  "huggingface-hub>=0.24",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pytest-mock>=3.14",
+  "ruff>=0.5",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.2",
+  "pytest-mock>=3.14",
+  "ruff>=0.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

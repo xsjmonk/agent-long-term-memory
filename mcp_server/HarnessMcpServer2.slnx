@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HarnessMcp.Contracts/HarnessMcp.Contracts.csproj" />
+    <Project Path="src/HarnessMcp.Core/HarnessMcp.Core.csproj" />
+    <Project Path="src/HarnessMcp.Infrastructure.Postgres/HarnessMcp.Infrastructure.Postgres.csproj" />
+    <Project Path="src/HarnessMcp.Transport.Mcp/HarnessMcp.Transport.Mcp.csproj" />
+    <Project Path="src/HarnessMcp.Host.Aot/HarnessMcp.Host.Aot.csproj" />
+  </Folder>
+</Solution>

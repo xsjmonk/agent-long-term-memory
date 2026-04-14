@@ -1,0 +1,31 @@
+name: agent-embedding-builder
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - python=3.11
+  # CUDA-enabled PyTorch (embeddings)
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.0
+
+  # llama.cpp CUDA build (local LLM)
+  - cuda-version=12.0
+  - llama.cpp
+  - llama-cpp-python=0.2.20
+
+  # Core runtime libraries (prefer conda where possible)
+  - pydantic
+  - pyyaml
+  - jsonschema
+  - psycopg
+
+  # Any packages not consistently available as conda artifacts
+  - pip:
+      - sentence-transformers>=3.0
+      - huggingface-hub>=0.24
+      - scikit-learn>=1.0
+      - fastapi>=0.110.0
+      - uvicorn>=0.27.0

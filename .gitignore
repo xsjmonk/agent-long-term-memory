@@ -1,0 +1,41 @@
+# JetBrains / Python / build artifacts
+.idea/
+.vscode/
+.vs/
+.pytest_cache/
+__pycache__/
+.venv/
+
+# Project data
+pqdata/
+mcp_server/logs/
+agent_embedding_builder/config/
+
+# Common IDE / editor files
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+*.trace
+
+# Local temp/swap
+*.swp
+*.swn
+*.tmp
+*.temp
+
+# Build output
+obj/
+bin/
+Release/
+
+# Temporary directories (best-effort)
+temp/
+%temp%/
+
