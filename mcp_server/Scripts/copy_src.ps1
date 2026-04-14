@@ -1,5 +1,5 @@
 param(
-    [string]$ZipFileName = "copy_src.zip",
+    [string]$ZipFileName = "mcp_server.zip",
     [string]$SourceRoot = ""
 )
 

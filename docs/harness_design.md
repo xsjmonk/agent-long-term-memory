@@ -1,553 +1,615 @@
-# Harness Agent-Integrated Control-Flow Design
+# Harness Control-Plane-Only Design
 
 ## 1. Purpose
 
-This revision closes the remaining gap between:
+This revision replaces the earlier runtime-centric harness design with a **control-plane-only harness**.
 
-- a **deterministic harness runtime**, and
-- a **real agent-facing workflow** where the end user stays entirely inside the agent UI.
+In this revised design:
 
-The current harness source now has a meaningful machine-readable protocol:
+- the **agent** does the actual work,
+- the **skills/rules** define the flow semantics,
+- the **harness** controls step order, validates transitions, and tells the agent what to do next,
+- the harness does **not** call any LLM API,
+- the harness does **not** call MCP itself,
+- the user continues to interact only with the agent.
 
-- `plan-task`
-- `describe-protocol`
-- `--stdout-json true`
-- `HarnessRunManifest`
-- `nextAction`
-- deterministic artifact output
-- strict MCP call order inside the runner
-
-That is good, but it is still not enough for the required user experience.
-
-The missing piece is the **agent integration layer** that makes the harness invisible to the user and gives the planning agent a strict, deterministic entrypoint.
-
-This document defines that missing layer.
+This directly aligns the architecture with the principle that the harness is the control plane, while the agent remains the planner/worker for planning-stage actions.
 
 ---
 
-## 2. What the current source already solved
+## 2. Why the previous design is no longer sufficient
 
-Based on the fixed source, the harness already implements important control-plane mechanics:
+The prior design still treated the harness runtime as something that:
 
-1. a separate client-side harness runtime
-2. deterministic planning stages
-3. MCP preflight
-4. required primary call order:
-   - `get_server_info`
-   - `retrieve_memory_by_chunks`
-   - `merge_retrieval_results`
-   - `build_memory_context_pack`
-5. plan synthesis after memory retrieval
-6. worker-packet generation
-7. machine-readable stdout manifest
-8. protocol self-description via `describe-protocol`
+- invoked a hidden planning command,
+- performed retrieval and plan generation internally,
+- returned a manifest and artifacts.
 
-That means the harness executable itself is no longer the main problem.
+That is useful as a pragmatic runtime, but it is not the desired final architecture.
 
-The remaining problem is that the **agent is not yet forced to use it automatically**.
+The desired architecture is stricter:
 
----
+1. user talks to the agent,
+2. agent calls the harness,
+3. harness tells the agent the next required step,
+4. agent performs that step,
+5. harness validates the result and advances the state,
+6. agent continues until the plan is complete.
 
-## 3. Why the current repo still does not satisfy the intended user flow
-
-The desired flow is:
-
-1. user gives task description in the agent
-2. harness controls the agent to retrieve memory
-3. agent analyzes retrieved memory
-4. agent creates a detailed plan
-5. user uses the plan to drive another agent
-
-The current repo still falls short in one decisive way:
-
-- it has a **harness runtime protocol**
-- but it does **not yet have an in-agent integration protocol bundle**
-
-So the burden is still on the agent implementation or the human operator to know:
-
-- when to invoke the harness
-- how to invoke it
-- how to interpret success/failure
-- which artifact to consume next
-- when to stop raw planning and switch to worker execution mode
-
-That is exactly the gap the user is objecting to.
+So the harness must become a **protocol/state-machine controller**, not a planner runtime.
 
 ---
 
-## 4. Final architecture decision
+## 3. Final architecture decision
 
-## 4.1 Keep the harness runtime
+## 3.1 Harness is control plane only
 
-Keep `HarnessMcp.AgentClient` as the control-plane runtime.
+The harness owns:
 
-Do not move planning into the MCP server.
-Do not let the execution worker retrieve memory directly.
-Do not replace the harness with ad hoc agent prompting.
+- session state,
+- stage sequencing,
+- allowed next actions,
+- schema validation,
+- stop/go decisions,
+- final completion status.
 
-## 4.2 Add an agent integration layer
+The harness does **not** own:
 
-Add a lightweight integration bundle that sits **above** the harness runtime and **inside the repository**.
+- language-model reasoning,
+- MCP tool execution,
+- memory analysis,
+- plan writing,
+- worker-packet authoring.
 
-This integration bundle exists only to make agent behavior deterministic and invisible to the end user.
+Those are performed by the agent under harness control.
 
-It must include:
+## 3.2 Skills define the semantic flow
 
-1. **agent rule files / skills**
-2. **one hidden stable invocation surface**
-3. **one stable machine-readable result manifest**
-4. **one stable execution handoff artifact**
-5. **tests that verify the integration contract**
+The skills/rules define:
 
-The user must only chat with the agent.
-The agent must decide to invoke the harness.
-The user must not be asked to run commands manually.
+- when harness must be invoked,
+- which tasks are trivial vs non-trivial,
+- how the agent should perform each step,
+- how the agent should call MCP tools when instructed,
+- how the agent should present the final plan to the user.
 
----
+Harness does not replace the skill. Harness and skills work together:
 
-## 5. Budget-saving implementation strategy
+- **skills** = semantic instructions and agent behavior envelope,
+- **harness** = step controller and validator.
 
-To keep cost low, do **not** invent a second runtime or a plugin framework.
+## 3.3 Harness must not require LLM API or MCP client
 
-Reuse what already exists:
+The harness must not require:
 
-- the current harness executable
-- the current stdout manifest
-- the current deterministic artifacts
-- the existing hidden PowerShell wrapper script
+- Claude API,
+- OpenAI API,
+- Codai API,
+- any direct model endpoint,
+- any MCP client library.
 
-Only add the minimal repository files needed so an external coding agent can use the harness automatically and consistently.
-
-That means:
-
-- do not redesign the harness core
-- do not redesign the MCP server
-- do not add autonomous agent loops
-- do not add a general-purpose orchestration service
-- do not add browser UI
-- do not add persistent job queues
+The agent already has a model and MCP access. The harness only controls the flow.
 
 ---
 
-## 6. Final integration model
+## 4. Responsibility split
 
-## 6.1 User-visible behavior
-
-The user interacts only with the coding agent.
-
-Example:
-
-> Add year switching to the yearly weighted card without changing engine logic.
-
-The user does not mention:
-- harness
-- command line
-- PowerShell
-- output directories
-- manifests
-- MCP tool order
-
-The agent is responsible for the hidden flow.
-
-## 6.2 Hidden agent behavior
-
-When a non-trivial task is received, the planning agent must:
-
-1. write the raw user task into a temporary task file or pass it as `--task-text`
-2. call the hidden harness invocation surface
-3. consume `HarnessRunManifest`
-4. if success:
-   - read `10-execution-plan.md`
-   - read `11-worker-packet.md`
-   - present the plan to the user
-   - if the user wants execution in another agent, hand off `11-worker-packet.md`
-5. if failure:
-   - stop
-   - report harness validation/retrieval failure
-   - do not continue with speculative planning
-
-This is the deterministic control-plane flow.
+| Layer | Responsibility |
+|---|---|
+| User | Provides the task in the agent UI |
+| Skills / Rules | Define the process and when harness is mandatory |
+| Harness | Controls sequence, emits next step, validates submitted artifacts, records state |
+| Agent | Performs each required step, calls MCP when instructed, reasons over results, generates plan |
+| MCP Server | Provides long-term memory tools and retrieval results |
+| Execution Agent | Executes an approved worker packet later |
 
 ---
 
-## 7. Files that must be added
-
-The current repo still needs the following files.
-
-## 7.1 Agent rule / skill files
-
-Add repository-local agent-control files.
-
-### A. `.cursor/rules/00-harness-planning.mdc`
-Purpose:
-- force planning-first flow
-- require hidden harness invocation before implementation work
-- forbid direct planning from raw task on non-trivial requests
-
-Core rules:
-- for any non-trivial implementation/refactor/design/debug request, invoke the harness first
-- do not start coding before harness success
-- use `12-harness-run-manifest.json` or stdout JSON as the authoritative result
-- use `11-worker-packet.md` as the execution handoff
-- do not retrieve long-term memory independently outside the harness flow
-
-### B. `.cursor/rules/01-harness-failure.mdc`
-Purpose:
-- force safe handling on harness failure
-
-Core rules:
-- if harness returns `success=false`, stop the planning flow
-- show the harness errors
-- do not continue with replacement planning
-- do not silently degrade into normal agent behavior
-
-### C. `.cursor/rules/02-harness-execution.mdc`
-Purpose:
-- constrain the execution agent
-
-Core rules:
-- if operating from a worker packet, do not retrieve long-term memory independently
-- do not replace the plan
-- do not expand scope
-- do not reinterpret architecture unless the worker packet explicitly allows it
-
-These files are the cheapest way to give the agent a deterministic behavior envelope.
-
-## 7.2 Stable hidden invocation surface
-
-Keep the user away from raw CLI arguments by defining one internal entry surface.
-
-Use the existing script path pattern and standardize it:
-
-### `Scripts/invoke-harness-plan.ps1`
-This script is **for the agent**, not for the user.
-
-Responsibilities:
-1. accept:
-   - `-TaskText`
-   - `-OutputDir`
-   - optional model/MCP overrides
-2. call `HarnessMcp.AgentClient.exe plan-task`
-3. force `--stdout-json true`
-4. optionally force `--print-worker-packet false`
-5. echo only the JSON manifest to stdout
-6. return non-zero exit code when harness fails
-
-This is the stable bridge between agent and harness runtime.
-
-The user never sees it.
-
-## 7.3 Protocol documentation file
-
-Keep and expand:
-
-### `docs/harness_protocol.md`
-
-It must describe:
-- when the planning agent must invoke harness
-- exact success/failure semantics
-- how to consume `HarnessRunManifest`
-- how to use `nextAction`
-- how to move from planning to execution agent
-- what is forbidden for the execution worker
-
-This doc is for agents/repo maintainers, not for the end user.
-
-## 7.4 Agent integration documentation
-
-Add:
-
-### `docs/agent_controlled_flow.md`
-
-This is a higher-level integration design doc describing:
-
-- user-facing flow
-- hidden harness invocation
-- planning-agent responsibilities
-- execution-agent responsibilities
-- failure behavior
-- handoff contract
-- repository-local rule files
-- why the user must remain unaware of harness details
-
-This file should become the definitive documentation for the integrated flow.
-
----
-
-## 8. Strict deterministic entrypoint
-
-## 8.1 Why the current source is still not a strict agent entrypoint
-
-Even with `describe-protocol`, the current harness is still only a deterministic **tool**.
-It is not yet a deterministic **agent entrypoint**.
-
-A strict agent entrypoint must answer:
-
-- when must the agent call the harness?
-- what exact hidden command must the agent use?
-- what exact stdout contract must the agent parse?
-- what exact file must the agent consume next?
-- when is the agent forbidden from continuing?
-
-The current code only covers the lower half of that contract.
-
-## 8.2 Final strict entrypoint design
-
-The strict agent entrypoint is:
-
-1. repository rule triggers harness on qualifying tasks
-2. agent calls `Scripts/invoke-harness-plan.ps1`
-3. wrapper calls `HarnessMcp.AgentClient.exe plan-task --stdout-json true`
-4. wrapper returns only `HarnessRunManifest`
-5. agent branches on:
-   - `success`
-   - `nextAction`
-6. on success, planning agent reads:
-   - `10-execution-plan.md`
-   - `11-worker-packet.md`
-7. execution agent uses only `11-worker-packet.md`
-
-This is deterministic and machine-driven.
-
----
-
-## 9. Required manifest semantics
-
-The existing manifest is good, but the integration contract must standardize how agents use it.
-
-`HarnessRunManifest` must remain the canonical contract.
-
-Required semantics:
-
-- `success=true` means the agent may continue
-- `success=false` means the agent must stop planning
-- `nextAction=paste_worker_packet_into_execution_agent` means the planning phase succeeded and the next phase is execution handoff
-- `nextAction=fix_errors_and_rerun_harness` means the agent must not continue with manual planning
-- `workerPacketMarkdownPath` is the authoritative execution-handoff file
-- `executionPlanMarkdownPath` is the authoritative planning-summary file
-
-Optional:
-- `workerPacketText` may be embedded only when explicitly requested; default should remain false to keep output small
-
----
-
-## 10. Planning agent behavior contract
-
-The planning agent must:
-
-1. accept the user task
-2. decide whether the task is trivial or non-trivial
-3. for non-trivial tasks, invoke the harness before planning
-4. consume only the harness result manifest
-5. present the generated plan to the user
-6. preserve the worker packet for execution handoff
-
-The planning agent must not:
-
-- plan directly from raw task for non-trivial work
-- retrieve memory directly outside harness
-- create a competing plan after harness failure
-- skip the worker packet handoff model
-
----
-
-## 11. Execution agent behavior contract
-
-The execution agent receives only the worker packet.
-
-It must:
-
-- execute the listed steps
-- stay within scope
-- honor hard constraints
-- honor forbidden actions
-- produce the required output sections
-
-It must not:
-
-- retrieve long-term memory independently
-- regenerate architecture decisions
-- expand scope
-- replace the plan
-
-This matches the original design intent.
-
----
-
-## 12. Task classification rule
-
-The agent integration needs a simple trigger rule so the harness is not called for every message.
-
-Use this budget-saving rule:
-
-### Trivial task — harness optional
-Examples:
-- explain a concept
-- small text rewrite
-- single obvious one-line change
-- answer-only discussion
-
-### Non-trivial task — harness mandatory
-Examples:
-- implementation task
-- refactor
-- bugfix with investigation
-- architecture change
-- design review that may turn into implementation
-- anything requiring repo changes across multiple files
-- anything where memory retrieval can improve quality
-
-This trigger rule belongs in the planning-agent rule file.
-
----
-
-## 13. Required repository outputs after integration
-
-After the integration work, the repo should contain at least:
+## 5. Correct end-to-end flow
 
 ```text
-docs/
-  harness_protocol.md
-  agent_controlled_flow.md
+User
+  -> Agent
+      -> Harness: start session
+      <- Harness: next required step
+  -> Agent performs step
+      -> Harness: submit step result
+      <- Harness: next required step
+  -> Agent performs next step
+      -> Harness: submit step result
+      <- Harness: next required step
+  ...
+      <- Harness: planning complete
+  -> Agent shows plan to user
+  -> User may use worker packet in another agent
+```
 
-Scripts/
-  invoke-harness-plan.ps1
+### Key rule
+
+The harness does not do the step.
+It only tells the agent which step is valid next.
+
+---
+
+## 6. Required planning stages
+
+The harness must model the following stages.
+
+1. `need_requirement_intent`
+2. `need_retrieval_chunk_set`
+3. `need_retrieval_chunk_validation`
+4. `need_mcp_retrieve_memory_by_chunks`
+5. `need_mcp_merge_retrieval_results`
+6. `need_mcp_build_memory_context_pack`
+7. `need_execution_plan`
+8. `need_worker_execution_packet`
+9. `complete`
+10. `error`
+
+The harness must never skip from raw task directly to execution plan.
+
+---
+
+## 7. Protocol design
+
+The harness and agent must share a **machine-readable step protocol**.
+
+The harness must provide a small CLI or local service surface that supports these operations:
+
+1. `start-session`
+2. `get-next-step`
+3. `submit-step-result`
+4. `get-session-status`
+5. `cancel-session`
+
+A single executable is fine, but these protocol actions must exist.
+
+## 7.1 `start-session`
+
+Purpose:
+- create a planning session,
+- register the raw task,
+- return the first required step.
+
+Input:
+
+```json
+{
+  "rawTask": "Add year switching without changing engine logic.",
+  "sessionId": null,
+  "metadata": {
+    "project": "optional",
+    "domain": "optional"
+  }
+}
+```
+
+Output:
+
+```json
+{
+  "success": true,
+  "sessionId": "sess-001",
+  "taskId": "task-001",
+  "stage": "need_requirement_intent",
+  "nextAction": "agent_generate_requirement_intent",
+  "inputContract": {
+    "artifactType": "RequirementIntent",
+    "schemaVersion": "1.0"
+  },
+  "instructions": [
+    "Convert the raw task into RequirementIntent JSON.",
+    "Do not query MCP yet.",
+    "Do not generate the plan yet."
+  ],
+  "payload": {
+    "rawTask": "Add year switching without changing engine logic."
+  },
+  "errors": [],
+  "warnings": []
+}
+```
+
+## 7.2 `get-next-step`
+
+Purpose:
+- return the current required action for an existing session.
+
+This allows the agent to re-sync if it lost context.
+
+## 7.3 `submit-step-result`
+
+Purpose:
+- submit the artifact/result produced by the agent for the current stage,
+- validate it,
+- advance to the next stage,
+- return the next required action.
+
+Input example:
+
+```json
+{
+  "sessionId": "sess-001",
+  "completedAction": "agent_generate_requirement_intent",
+  "artifact": {
+    "artifactType": "RequirementIntent",
+    "schemaVersion": "1.0",
+    "value": {
+      "task_id": "task-001",
+      "task_type": "ui-change",
+      "goal": "support year switching via ajax",
+      "hard_constraints": ["engine must not change"],
+      "risk_signals": ["placement consistency"],
+      "complexity": "medium"
+    }
+  }
+}
+```
+
+Output example:
+
+```json
+{
+  "success": true,
+  "sessionId": "sess-001",
+  "taskId": "task-001",
+  "stage": "need_retrieval_chunk_set",
+  "nextAction": "agent_generate_retrieval_chunk_set",
+  "inputContract": {
+    "artifactType": "RetrievalChunkSet",
+    "schemaVersion": "1.0"
+  },
+  "instructions": [
+    "Generate compact purpose-specific retrieval chunks.",
+    "Do not mix constraint, risk, pattern, or similar-case semantics in one chunk."
+  ],
+  "payload": {
+    "requirementIntent": {
+      "task_id": "task-001",
+      "task_type": "ui-change"
+    }
+  },
+  "errors": [],
+  "warnings": []
+}
+```
+
+## 7.4 `get-session-status`
+
+Purpose:
+- inspect current stage,
+- inspect latest accepted artifacts,
+- inspect failures,
+- support deterministic resume.
+
+## 7.5 `cancel-session`
+
+Purpose:
+- abort the session cleanly.
+
+---
+
+## 8. Required action types
+
+The harness must use explicit action names.
+
+At minimum:
+
+- `agent_generate_requirement_intent`
+- `agent_generate_retrieval_chunk_set`
+- `agent_validate_chunk_quality` (optional if harness validates internally)
+- `agent_call_mcp_retrieve_memory_by_chunks`
+- `agent_call_mcp_merge_retrieval_results`
+- `agent_call_mcp_build_memory_context_pack`
+- `agent_generate_execution_plan`
+- `agent_generate_worker_execution_packet`
+- `complete`
+- `stop_with_error`
+
+These action names are the shared vocabulary between harness and agent.
+
+---
+
+## 9. Artifact contracts
+
+The harness must validate these artifact types.
+
+### 9.1 `RequirementIntent`
+
+The agent produces it.
+The harness validates required fields and normalizes the state.
+
+### 9.2 `RetrievalChunkSet`
+
+The agent produces it.
+The harness validates:
+
+- required chunk coverage,
+- one-purpose-per-chunk,
+- compactness,
+- ambiguity preservation.
+
+### 9.3 `RetrieveMemoryByChunksResponse`
+
+The agent calls MCP tool `retrieve_memory_by_chunks` and submits the full result back to harness.
+
+### 9.4 `MergeRetrievalResultsResponse`
+
+The agent calls MCP tool `merge_retrieval_results` and submits the result back to harness.
+
+### 9.5 `BuildMemoryContextPackResponse`
+
+The agent calls MCP tool `build_memory_context_pack` and submits the result back to harness.
+
+### 9.6 `ExecutionPlan`
+
+The agent generates it from:
+
+- raw task,
+- accepted `RequirementIntent`,
+- accepted `RetrievalChunkSet`,
+- accepted memory context pack.
+
+The harness validates:
+
+- no missing constraints,
+- no missing steps,
+- acceptance checks present,
+- no worker-side memory retrieval instruction.
+
+### 9.7 `WorkerExecutionPacket`
+
+The agent generates it.
+The harness validates that it:
+
+- preserves hard constraints,
+- preserves forbidden actions,
+- uses the approved execution plan only,
+- forbids independent memory retrieval in execution phase.
+
+---
+
+## 10. How MCP is handled
+
+The harness must not call MCP directly.
+
+Instead, when the next stage is `need_mcp_retrieve_memory_by_chunks`, the harness returns:
+
+```json
+{
+  "nextAction": "agent_call_mcp_retrieve_memory_by_chunks",
+  "toolName": "retrieve_memory_by_chunks",
+  "inputContract": {
+    "artifactType": "RetrieveMemoryByChunksRequest",
+    "schemaVersion": "1.0"
+  },
+  "payload": {
+    "request": { ... }
+  }
+}
+```
+
+The agent then:
+
+1. calls MCP,
+2. receives the result,
+3. submits the result back to harness through `submit-step-result`.
+
+The same pattern applies to:
+
+- `merge_retrieval_results`
+- `build_memory_context_pack`
+
+This preserves your required architecture:
+
+- harness controls,
+- agent does,
+- MCP serves retrieval.
+
+---
+
+## 11. How skills are used
+
+Skills/rules remain the semantic driver.
+
+They must instruct the agent to:
+
+1. call harness for non-trivial tasks,
+2. obey `nextAction`,
+3. produce only the requested artifact type,
+4. call MCP only when harness says so,
+5. submit every result back to harness before continuing,
+6. stop if harness returns `stop_with_error`.
+
+### Skill rule example
+
+```text
+For any non-trivial implementation, refactor, design, or debugging task:
+1. Start a harness session.
+2. Read the returned nextAction.
+3. Perform only that nextAction.
+4. Submit the produced artifact or MCP result back to harness.
+5. Do not skip stages.
+6. Do not generate an execution plan before harness reaches the execution-plan stage.
+7. Do not perform execution work in the planning session.
+```
+
+This keeps the flow defined in skills while the harness enforces the progression.
+
+---
+
+## 12. Budget-saving implementation strategy
+
+To keep cost low:
+
+- do not add LLM provider code to the harness,
+- do not add MCP client code to the harness,
+- do not add browser UI,
+- do not add background orchestration service,
+- do not add distributed state storage,
+- do not add autonomous loops,
+- do not redesign the MCP server.
+
+Implement only:
+
+1. local session state,
+2. protocol commands,
+3. schema validators,
+4. state transition rules,
+5. compact session artifacts/logging,
+6. skill files that tell the agent to use the harness.
+
+---
+
+## 13. Files that must exist
+
+```text
+src/
+  HarnessMcp.ControlPlane/
+    Program.cs
+    SessionStore.cs
+    HarnessProtocolService.cs
+    HarnessStateMachine.cs
+    Validators/
+    Contracts/
+    TransitionRules/
+
+docs/
+  harness_control_plane_protocol.md
+  agent_controlled_planning_flow.md
 
 .cursor/
   rules/
-    00-harness-planning.mdc
+    00-harness-control-plane.mdc
     01-harness-failure.mdc
     02-harness-execution.mdc
 ```
 
-The harness runtime remains under:
+### Notes
 
-```text
-src/HarnessMcp.AgentClient/
+- This replaces the old runtime-centric `HarnessMcp.AgentClient` concept.
+- If you want to keep the old project name for compatibility, that is acceptable, but its role must change to control plane only.
+
+---
+
+## 14. Session state model
+
+The harness must store, at minimum:
+
+- `sessionId`
+- `taskId`
+- `rawTask`
+- `currentStage`
+- `lastAcceptedAction`
+- `acceptedRequirementIntent`
+- `acceptedRetrievalChunkSet`
+- `acceptedRetrieveMemoryByChunksResponse`
+- `acceptedMergeRetrievalResultsResponse`
+- `acceptedBuildMemoryContextPackResponse`
+- `acceptedExecutionPlan`
+- `acceptedWorkerExecutionPacket`
+- `errors`
+- `warnings`
+- `createdUtc`
+- `updatedUtc`
+
+This can be stored as local JSON files for v1.
+
+No DB is required.
+
+---
+
+## 15. Validation behavior
+
+The harness must validate every step result before advancing.
+
+### On validation failure
+
+Return:
+
+```json
+{
+  "success": false,
+  "stage": "error",
+  "nextAction": "stop_with_error",
+  "errors": [
+    "constraint chunk missing although hard_constraints is not empty"
+  ],
+  "warnings": []
+}
 ```
 
-No second runtime host is needed.
+The agent must stop and show the issue.
+
+### On valid result
+
+Return the next required action.
+
+No speculative continuation is allowed.
 
 ---
 
-## 14. Required tests
+## 16. Deterministic completion
 
-The existing tests validate harness runtime behavior, but not the agent integration contract.
+Planning completes only when the harness has accepted:
 
-Add these tests.
+1. `RequirementIntent`
+2. `RetrievalChunkSet`
+3. `RetrieveMemoryByChunksResponse`
+4. `MergeRetrievalResultsResponse`
+5. `BuildMemoryContextPackResponse`
+6. `ExecutionPlan`
+7. `WorkerExecutionPacket`
 
-### A. `ProtocolDescriptionTests`
-Extend to verify:
-- `describe-protocol` clearly states the harness is to be invoked before execution work
-- `nextAction` meaning is stable
-- worker-packet handoff is explicit
+Only then may the harness return:
 
-### B. `PlanTaskCommandProtocolTests`
-Verify:
-- `--stdout-json true` returns exactly one JSON object
-- success manifest contains `nextAction=paste_worker_packet_into_execution_agent`
-- failure manifest contains `nextAction=fix_errors_and_rerun_harness`
-
-### C. `InvokeHarnessPlanScriptTests`
-Add script-level tests that verify the wrapper:
-- always passes `--stdout-json true`
-- returns only JSON to stdout
-- exits non-zero on harness failure
-
-These can be string/content tests if you want to keep cost low.
-
-### D. `AgentRuleContentTests`
-Add low-cost tests that validate rule-file contents:
-- planning rule contains mandatory harness-first instructions
-- failure rule forbids fallback manual planning
-- execution rule forbids worker-side memory retrieval
-
-### E. `PlanningSessionRunnerFlowTests`
-Keep and extend:
-- execution plan synthesis happens only after `build_memory_context_pack`
-- worker packet is not written when plan validation fails
-
-These tests are cheap and directly protect the integration contract.
+```json
+{
+  "success": true,
+  "stage": "complete",
+  "nextAction": "complete",
+  "artifacts": {
+    "executionPlan": "...",
+    "workerExecutionPacket": "..."
+  },
+  "errors": [],
+  "warnings": []
+}
+```
 
 ---
 
-## 15. Design decision on “skills”
+## 17. Required tests
 
-You asked whether skills may be needed.
+Add low-cost deterministic tests.
 
-Final decision:
+### 17.1 Protocol tests
 
-- **Yes, add skills/rules**
-- but do **not** rely on skills alone
+- `StartSessionReturnsRequirementIntentStepTests`
+- `SubmitRequirementIntentAdvancesToChunkStepTests`
+- `SubmitChunkSetAdvancesToMcpRetrieveStepTests`
+- `SubmitRetrieveMemoryByChunksAdvancesToMergeStepTests`
+- `SubmitMergeAdvancesToContextPackStepTests`
+- `SubmitContextPackAdvancesToExecutionPlanStepTests`
+- `SubmitExecutionPlanAdvancesToWorkerPacketStepTests`
+- `SubmitWorkerPacketCompletesSessionTests`
 
-Reason:
-- skills/rules tell the agent **when and how** to use the harness
-- the harness executable and manifest still provide the hard deterministic protocol
-- together they are stronger than either one alone
+### 17.2 Validation tests
 
-So the final design is:
+- invalid `RequirementIntent` stops flow
+- invalid chunk purity stops flow
+- missing constraint chunk stops flow
+- invalid MCP result shape stops flow
+- execution plan missing constraints stops flow
+- worker packet allowing independent memory retrieval stops flow
 
-- harness runtime = deterministic control-plane engine
-- agent rules/skills = deterministic in-agent trigger and behavior envelope
+### 17.3 Rule content tests
 
-That is the lowest-cost design that satisfies the desired UX.
+- planning rule requires harness-first flow
+- failure rule forbids bypass after harness error
+- execution rule forbids independent retrieval
 
----
-
-## 16. Final assessment of the current source
-
-## 16.1 Does the current source strictly control the agent yet?
-
-Not yet.
-
-It already provides:
-- deterministic runtime protocol
-- machine-readable manifest
-- explicit next action
-- hidden-tool compatibility
-
-But it still lacks:
-- repository-local agent rule files / skills
-- standardized hidden wrapper usage contract
-- integrated flow documentation for planning-agent vs execution-agent
-- tests for the agent-integration layer
-
-So the source is **necessary but not sufficient**.
-
-## 16.2 Can it give the agent a strict entrypoint and deterministic flow right now?
-
-Partially.
-
-It gives a deterministic **runtime** entrypoint.
-It does not yet give a deterministic **agent integration** entrypoint.
-
-That is the exact gap this revision closes.
-
----
-
-## 17. Final budget-saving decision summary
-
-Keep:
-- current harness runtime
-- current manifest design
-- current deterministic planning flow
-- current tests for runtime behavior
-
-Add only:
-1. rule/skill files
-2. hidden wrapper contract
-3. integration docs
-4. small integration tests
-
-Do not add:
-- extra runtime services
-- autonomous orchestration loops
-- plugin frameworks
-- user-facing commands
-- UI surfaces
-- extra agent servers
-
-This is the minimum complete solution.
+These tests are cheap and protect the control-plane contract.
 
 ---
 
@@ -555,22 +617,47 @@ This is the minimum complete solution.
 
 ```text
 User
-  -> talks only to coding agent
-
-Planning Agent
-  -> detects non-trivial task
-  -> invokes hidden harness wrapper
-  -> wrapper calls HarnessMcp.AgentClient.exe plan-task --stdout-json true
-  -> harness performs deterministic retrieval + planning flow
-  -> harness writes artifacts and returns HarnessRunManifest
-  -> planning agent reads manifest
-  -> planning agent shows generated plan
-  -> planning agent provides worker packet for execution
-
-Execution Agent
-  -> receives only worker packet
-  -> executes
-  -> does not retrieve memory independently
+  -> Agent
+     -> calls harness start-session
+     <- harness says: generate RequirementIntent
+  -> Agent generates RequirementIntent
+     -> submits to harness
+     <- harness says: generate RetrievalChunkSet
+  -> Agent generates RetrievalChunkSet
+     -> submits to harness
+     <- harness says: call MCP retrieve_memory_by_chunks
+  -> Agent calls MCP retrieve_memory_by_chunks
+     -> submits result to harness
+     <- harness says: call MCP merge_retrieval_results
+  -> Agent calls MCP merge_retrieval_results
+     -> submits result to harness
+     <- harness says: call MCP build_memory_context_pack
+  -> Agent calls MCP build_memory_context_pack
+     -> submits result to harness
+     <- harness says: generate ExecutionPlan
+  -> Agent generates ExecutionPlan
+     -> submits to harness
+     <- harness says: generate WorkerExecutionPacket
+  -> Agent generates WorkerExecutionPacket
+     -> submits to harness
+     <- harness says: complete
+  -> Agent shows final plan to user
 ```
 
-This is the final complete integration model.
+---
+
+## 19. Final decision summary
+
+This revised design makes the harness a **true control plane**.
+
+It:
+
+- does not need an LLM API,
+- does not need an MCP client,
+- does not do the actual planning work,
+- does not do the actual memory retrieval work,
+- keeps the flow semantics in skills,
+- makes the agent call the harness to know the next valid step,
+- gives the agent and harness a shared protocol.
+
+That is the correct architecture for your clarified requirement.
