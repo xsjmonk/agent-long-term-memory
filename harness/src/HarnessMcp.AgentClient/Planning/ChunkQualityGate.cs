@@ -1,12 +1,21 @@
-using System.Text.RegularExpressions;
 using HarnessMcp.Contracts;
-using HarnessMcp.AgentClient.Support;
 
 namespace HarnessMcp.AgentClient.Planning;
 
 public sealed class ChunkQualityGate
 {
     public const int MaxChunkTextChars = 200;
+    private static readonly string[] ForbiddenProtocolMarkers =
+    [
+        "core_task|",
+        "constraint|",
+        "risk|",
+        "pattern|",
+        "similar_case|",
+        "task_type:",
+        "goal:",
+        "ambiguities:"
+    ];
 
     public ChunkQualityReport Validate(RetrievalChunkSet chunkSet, RequirementIntent intent)
     {
@@ -38,37 +47,13 @@ public sealed class ChunkQualityGate
             if (c.Text is not null && c.Text.Length > MaxChunkTextChars)
                 errors.Add($"Chunk {c.ChunkId} text too long ({c.Text.Length} chars > {MaxChunkTextChars}).");
 
-            // Purity: each chunk text must start with the expected purpose prefix.
-            var expectedPrefix = c.ChunkType switch
+            // Protocol purity: the retrieval key text must not contain any pseudo-protocol markers.
+            foreach (var marker in ForbiddenProtocolMarkers)
             {
-                ChunkType.CoreTask => "core_task|",
-                ChunkType.Constraint => "constraint|",
-                ChunkType.Risk => "risk|",
-                ChunkType.Pattern => "pattern|",
-                ChunkType.SimilarCase => "similar_case|",
-                _ => null
-            };
-
-            if (expectedPrefix is null)
-                errors.Add($"Chunk {c.ChunkId} has unknown ChunkType '{c.ChunkType}'.");
-            else if (!c.Text!.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
-                errors.Add($"Chunk {c.ChunkId} purity error: expected prefix '{expectedPrefix}' for type '{c.ChunkType}'.");
-
-            // No mixed-purpose text: the chunk text must not contain other purpose prefixes.
-            var mixedPurposes = new[]
-            {
-                ("core_task|", ChunkType.CoreTask),
-                ("constraint|", ChunkType.Constraint),
-                ("risk|", ChunkType.Risk),
-                ("pattern|", ChunkType.Pattern),
-                ("similar_case|", ChunkType.SimilarCase),
-            };
-            foreach (var (needle, _) in mixedPurposes)
-            {
-                if (!string.Equals(needle, expectedPrefix, StringComparison.OrdinalIgnoreCase) &&
-                    c.Text!.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (!string.IsNullOrWhiteSpace(c.Text) &&
+                    c.Text.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    errors.Add($"Chunk {c.ChunkId} purity error: contains other purpose marker '{needle}'.");
+                    errors.Add($"Chunk {c.ChunkId} text contains forbidden protocol marker '{marker}'.");
                     break;
                 }
             }
@@ -92,27 +77,6 @@ public sealed class ChunkQualityGate
         var needsSimilar = complexityKey is "medium" or "high";
         if (needsSimilar && !chunkSet.CoverageReport.HasSimilarCase)
             errors.Add("Complexity is medium/high but similar_case chunk was not emitted.");
-
-        // Ambiguity preservation: if intent has ambiguities, require them to appear in the core_task chunk text.
-        if (intent.Ambiguities.Count > 0)
-        {
-            var core = chunkSet.Chunks.FirstOrDefault(c => c.ChunkType == ChunkType.CoreTask);
-            if (core is null)
-                errors.Add("Ambiguity preservation failed: core_task chunk missing.");
-            else
-            {
-                foreach (var a in intent.Ambiguities)
-                {
-                    var trimmed = a.Trim();
-                    if (!string.IsNullOrWhiteSpace(trimmed) &&
-                        (core.Text is null || !core.Text.Contains(trimmed, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        errors.Add($"Ambiguity preservation failed: core_task chunk does not include ambiguity '{a}'.");
-                        break;
-                    }
-                }
-            }
-        }
 
         var isValid = errors.Count == 0;
         var hasSimilar = chunkSet.CoverageReport.HasSimilarCase;

@@ -25,7 +25,9 @@ public sealed class PlanningSessionRunnerTests
             Domain: null,
             MaxItemsPerChunk: 5,
             MinimumAuthority: AuthorityLevel.Reviewed,
-            EmitIntermediates: emitIntermediates);
+            EmitIntermediates: emitIntermediates,
+            StdoutJson: false,
+            PrintWorkerPacket: false);
 
     private static MergedKnowledgeItemDto MergedItem(Guid id, RetrievalClass cls, string title)
     {

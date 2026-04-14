@@ -33,7 +33,7 @@ public sealed class McpRequestMapperTests
             Domain: "ui",
             Module: "cards",
             Features: new[] { "ajax-switch" },
-            Layers: new[] { "ui", "placement" },
+            Layers: new[] { "ui" },
             Concerns: new[] { "engine logic must not change", "avoid placement inconsistency" },
             Repos: Array.Empty<string>(),
             Services: Array.Empty<string>(),
@@ -100,7 +100,7 @@ public sealed class McpRequestMapperTests
         req.RetrievalChunks[0].StructuredScopes!.Domains.Should().Contain("ui");
         req.RetrievalChunks[0].StructuredScopes!.Modules.Should().Contain("cards");
         req.RetrievalChunks[0].StructuredScopes!.Features.Should().Contain("ajax-switch");
-        req.RetrievalChunks[0].StructuredScopes!.Layers.Should().Contain("placement");
+        req.RetrievalChunks[0].StructuredScopes!.Layers.Should().Contain("ui");
         req.RetrievalChunks[0].StructuredScopes!.Concerns.Should().Contain("engine logic must not change");
     }
 }

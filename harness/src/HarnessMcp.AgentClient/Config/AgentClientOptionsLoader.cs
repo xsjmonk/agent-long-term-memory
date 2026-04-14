@@ -20,6 +20,8 @@ public static class AgentClientOptionsLoader
         int maxItemsPerChunk = 5;
         AuthorityLevel minimumAuthority = AuthorityLevel.Reviewed;
         bool emitIntermediates = true;
+        bool stdoutJson = true;
+        bool printWorkerPacket = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -112,6 +114,18 @@ public static class AgentClientOptionsLoader
                         return RunResult.Failure<AgentClientOptions>("Invalid value for --emit-intermediates.");
                     i++;
                     break;
+                case "--stdout-json":
+                    v = NextVal();
+                    if (v is null || !bool.TryParse(v, out stdoutJson))
+                        return RunResult.Failure<AgentClientOptions>("Invalid value for --stdout-json.");
+                    i++;
+                    break;
+                case "--print-worker-packet":
+                    v = NextVal();
+                    if (v is null || !bool.TryParse(v, out printWorkerPacket))
+                        return RunResult.Failure<AgentClientOptions>("Invalid value for --print-worker-packet.");
+                    i++;
+                    break;
                 default:
                     return RunResult.Failure<AgentClientOptions>($"Unknown argument: {a}");
             }
@@ -142,7 +156,9 @@ public static class AgentClientOptionsLoader
             Domain: domain,
             MaxItemsPerChunk: maxItemsPerChunk,
             MinimumAuthority: minimumAuthority,
-            EmitIntermediates: emitIntermediates);
+            EmitIntermediates: emitIntermediates,
+            StdoutJson: stdoutJson,
+            PrintWorkerPacket: printWorkerPacket);
 
         return RunResult.Success(opts);
     }

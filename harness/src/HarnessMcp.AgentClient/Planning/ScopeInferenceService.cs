@@ -10,7 +10,6 @@ public sealed class ScopeInferenceService
 
         var layers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var l in intent.CandidateLayers) if (!string.IsNullOrWhiteSpace(l)) layers.Add(l.Trim());
-        foreach (var l in intent.RetrievalFocuses) if (!string.IsNullOrWhiteSpace(l)) layers.Add(l.Trim());
 
         var concerns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var c in intent.HardConstraints) if (!string.IsNullOrWhiteSpace(c)) concerns.Add(c.Trim());

@@ -9,6 +9,9 @@ namespace HarnessMcp.AgentClient.Planning;
 
 public sealed class PlanningSessionRunner
 {
+    private const string ProtocolName = "HarnessMcp.AgentClient.PlanTaskProtocol";
+    private const string ProtocolVersion = "1.0";
+
     private readonly AgentClientOptions _options;
     private readonly IPlanningModelClient _planningModelClient;
     private readonly IMcpToolClient _mcpToolClient;
@@ -40,12 +43,39 @@ public sealed class PlanningSessionRunner
 
         // Build a deterministic artifact path map regardless of emit-intermediates.
         var paths = new ArtifactPathBuilder();
+        var sessionJsonPath = paths.SessionJson(_options.OutputDir);
+        var executionPlanMarkdownPath = paths.ExecutionPlanMd(_options.OutputDir);
+        var workerPacketMarkdownPath = paths.WorkerPacketMd(_options.OutputDir);
+        var manifestJsonPath = paths.HarnessRunManifestJson(_options.OutputDir);
         var artifactPaths = new Dictionary<string, string>
         {
-            ["00-session.json"] = paths.SessionJson(_options.OutputDir),
-            ["10-execution-plan.md"] = paths.ExecutionPlanMd(_options.OutputDir),
-            ["11-worker-packet.md"] = paths.WorkerPacketMd(_options.OutputDir),
+            ["00-session.json"] = sessionJsonPath,
+            ["10-execution-plan.md"] = executionPlanMarkdownPath,
+            ["11-worker-packet.md"] = workerPacketMarkdownPath,
+            ["12-harness-run-manifest.json"] = manifestJsonPath
         };
+
+        async Task<string> WriteManifestAsync(bool success, string nextAction, bool usedFallbackSearches, string? workerPacketText, CancellationToken ct)
+        {
+            var manifest = new HarnessRunManifest(
+                ProtocolName: ProtocolName,
+                ProtocolVersion: ProtocolVersion,
+                Success: success,
+                SessionId: sessionId,
+                TaskId: taskId,
+                NextAction: nextAction,
+                SessionJsonPath: sessionJsonPath,
+                ExecutionPlanMarkdownPath: executionPlanMarkdownPath,
+                WorkerPacketMarkdownPath: workerPacketMarkdownPath,
+                WorkerPacketText: workerPacketText,
+                UsedFallbackSearches: usedFallbackSearches,
+                Warnings: warnings,
+                Errors: errors);
+
+            var json = JsonSerializer.Serialize(manifest, JsonHelpers.Default);
+            await File.WriteAllTextAsync(manifestJsonPath, json, ct).ConfigureAwait(false);
+            return json;
+        }
 
         try
         {
@@ -66,6 +96,8 @@ public sealed class PlanningSessionRunner
                 warnings.AddRange(intentValidation.Warnings);
                 endedUtc = UtcClock.NowUtc();
                 await WriteSessionOnlyAsync(errors, warnings, usedFallback, sessionId, taskId, startedUtc, endedUtc, artifactPaths, null, cancellationToken)
+                    .ConfigureAwait(false);
+                await WriteManifestAsync(success: false, "fix_errors_and_rerun_harness", usedFallback, workerPacketText: null, cancellationToken)
                     .ConfigureAwait(false);
                 return RunResult<PlanningSessionRunnerResult>.Failure(errors, warnings);
             }
@@ -123,6 +155,8 @@ public sealed class PlanningSessionRunner
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
+                await WriteManifestAsync(success: false, "fix_errors_and_rerun_harness", usedFallback, workerPacketText: null, cancellationToken)
+                    .ConfigureAwait(false);
                 return RunResult<PlanningSessionRunnerResult>.Failure(errors);
             }
 
@@ -166,6 +200,8 @@ public sealed class PlanningSessionRunner
                 errors.AddRange(planValidation.Errors);
                 warnings.AddRange(planValidation.Warnings);
                 await WriteSessionOnlyAsync(errors, warnings, usedFallback, sessionId, taskId, startedUtc, endedUtc, artifactPaths, null, cancellationToken)
+                    .ConfigureAwait(false);
+                await WriteManifestAsync(success: false, "fix_errors_and_rerun_harness", usedFallback, workerPacketText: null, cancellationToken)
                     .ConfigureAwait(false);
                 return RunResult<PlanningSessionRunnerResult>.Failure(errors, warnings);
             }
@@ -228,6 +264,17 @@ public sealed class PlanningSessionRunner
                     workerPacket: workerPacket)
                 .ConfigureAwait(false);
 
+            var workerPacketText = _options.PrintWorkerPacket
+                ? MarkdownRenderers.RenderWorkerPacketMarkdown(workerPacket)
+                : null;
+            await WriteManifestAsync(
+                    success: true,
+                    nextAction: "paste_worker_packet_into_execution_agent",
+                    usedFallbackSearches: usedFallback,
+                    workerPacketText: workerPacketText,
+                    ct: cancellationToken)
+                .ConfigureAwait(false);
+
             return RunResult.Success(new PlanningSessionRunnerResult(execMdPath, workerMdPath), warnings);
         }
         catch (Exception ex)
@@ -235,6 +282,8 @@ public sealed class PlanningSessionRunner
             endedUtc = UtcClock.NowUtc();
             errors.Add(ex.ToString());
             await WriteSessionOnlyAsync(errors, warnings, usedFallback, sessionId, taskId, startedUtc, endedUtc, artifactPaths, null, cancellationToken)
+                .ConfigureAwait(false);
+            await WriteManifestAsync(success: false, "fix_errors_and_rerun_harness", usedFallback, workerPacketText: null, cancellationToken)
                 .ConfigureAwait(false);
             return RunResult<PlanningSessionRunnerResult>.Failure(errors, warnings);
         }

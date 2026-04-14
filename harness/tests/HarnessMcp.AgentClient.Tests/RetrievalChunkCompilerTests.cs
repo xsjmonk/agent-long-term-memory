@@ -2,6 +2,7 @@ using FluentAssertions;
 using HarnessMcp.AgentClient.Planning;
 using HarnessMcp.Contracts;
 using Xunit;
+using System.Linq;
 
 namespace HarnessMcp.AgentClient.Tests;
 
@@ -93,26 +94,30 @@ public sealed class RetrievalChunkCompilerTests
         var compiler = new RetrievalChunkCompiler(new ScopeInferenceService(), new ChunkTextNormalizer());
         var chunkSet = compiler.Compile(intent);
 
-        var markers = new[]
+        var forbiddenMarkers = new[]
         {
-            (ChunkType.CoreTask, "core_task|"),
-            (ChunkType.Constraint, "constraint|"),
-            (ChunkType.Risk, "risk|"),
-            (ChunkType.Pattern, "pattern|"),
-            (ChunkType.SimilarCase, "similar_case|")
+            "core_task|",
+            "constraint|",
+            "risk|",
+            "pattern|",
+            "similar_case|",
+            "task_type:",
+            "goal:",
+            "ambiguities:"
         };
 
         foreach (var c in chunkSet.Chunks)
         {
-            var expected = markers.Single(m => m.Item1 == c.ChunkType).Item2;
-            c.Text!.StartsWith(expected, StringComparison.OrdinalIgnoreCase).Should().BeTrue();
-
-            foreach (var m in markers)
+            c.Text!.Should().NotBeNullOrWhiteSpace();
+            foreach (var marker in forbiddenMarkers)
             {
-                if (m.Item2.Equals(expected, StringComparison.OrdinalIgnoreCase)) continue;
-                c.Text!.IndexOf(m.Item2, StringComparison.OrdinalIgnoreCase).Should().Be(-1);
+                c.Text!.IndexOf(marker, StringComparison.OrdinalIgnoreCase).Should().Be(-1);
             }
         }
+
+        // Ambiguities must be preserved structurally, not injected into retrieval text.
+        var coreChunk = chunkSet.Chunks.First(c => c.ChunkType == ChunkType.CoreTask);
+        coreChunk.Text!.IndexOf("maybe clarify", StringComparison.OrdinalIgnoreCase).Should().Be(-1);
     }
 }
 

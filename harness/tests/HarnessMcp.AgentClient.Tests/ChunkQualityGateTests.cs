@@ -47,7 +47,7 @@ public sealed class ChunkQualityGateTests
                 new RetrievalChunk(
                     ChunkId: "c1",
                     ChunkType: ChunkType.CoreTask,
-                    Text: "core_task|task_type:tt|goal:g",
+                    Text: "core goal text",
                     Scopes: scopes,
                     SimilarCase: null)
             },
@@ -86,7 +86,7 @@ public sealed class ChunkQualityGateTests
             Complexity: "low");
 
         var scopes = new PlannedChunkScopes(null, null, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
-        var longText = "constraint|" + new string('a', ChunkQualityGate.MaxChunkTextChars + 50);
+        var longText = new string('a', ChunkQualityGate.MaxChunkTextChars + 50);
 
         var chunkSet = new RetrievalChunkSet(
             SessionId: intent.SessionId,
@@ -94,7 +94,7 @@ public sealed class ChunkQualityGateTests
             Complexity: intent.Complexity,
             Chunks: new[]
             {
-                new RetrievalChunk("core", ChunkType.CoreTask, "core_task|task_type:tt|goal:g", scopes, null),
+                new RetrievalChunk("core", ChunkType.CoreTask, "core goal text", scopes, null),
                 new RetrievalChunk("con", ChunkType.Constraint, longText, scopes, null)
             },
             CoverageReport: new ChunkCoverageReport(
@@ -131,7 +131,7 @@ public sealed class ChunkQualityGateTests
             Complexity: "low");
 
         var scopes = new PlannedChunkScopes(null, null, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
-        var mixed = "constraint|hc and also risk|boom";
+        var forbiddenText = "engine logic constraint|hc risk|boom";
 
         var chunkSet = new RetrievalChunkSet(
             SessionId: intent.SessionId,
@@ -139,8 +139,8 @@ public sealed class ChunkQualityGateTests
             Complexity: intent.Complexity,
             Chunks: new[]
             {
-                new RetrievalChunk("core", ChunkType.CoreTask, "core_task|task_type:tt|goal:g", scopes, null),
-                new RetrievalChunk("con", ChunkType.Constraint, mixed, scopes, null)
+                new RetrievalChunk("core", ChunkType.CoreTask, "core goal text", scopes, null),
+                new RetrievalChunk("con", ChunkType.Constraint, forbiddenText, scopes, null)
             },
             CoverageReport: new ChunkCoverageReport(
                 HasCoreTask: true,
@@ -151,7 +151,7 @@ public sealed class ChunkQualityGateTests
 
         var report = new ChunkQualityGate().Validate(chunkSet, intent);
         report.IsValid.Should().BeFalse();
-        report.Errors.Should().Contain(e => e.Contains("purity"));
+        report.Errors.Should().Contain(e => e.Contains("forbidden protocol marker"));
     }
 }
 

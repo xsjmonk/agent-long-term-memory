@@ -44,7 +44,7 @@ public sealed class FallbackRetrievalPlanner
             if (signatureChunk?.SimilarCase is not null)
             {
                 var signature = signatureChunk.SimilarCase;
-                var queryText = System.Text.Json.JsonSerializer.Serialize(signature, JsonHelpers.Default);
+                var queryText = SimilarCaseQueryTextBuilder.Build(signature);
 
                 var searchReq = _mapper.MapFallbackSearchRequest(
                     requestId: Ids.NewRequestId(intent.TaskId) + ":fallback-similar",
@@ -104,7 +104,7 @@ public sealed class FallbackRetrievalPlanner
         if (intent.RiskSignals.Count > 0 && merged.AntiPatterns.Count == 0)
         {
             usedAny = true;
-            var queryText = string.Join(" | ", intent.RiskSignals.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()));
+            var queryText = string.Join(" ", intent.RiskSignals.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()));
 
             var searchReq = _mapper.MapFallbackSearchRequest(
                 requestId: Ids.NewRequestId(intent.TaskId) + ":fallback-risk",

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 using HarnessMcp.Contracts;
 using HarnessMcp.AgentClient.Support;
 
@@ -30,14 +31,31 @@ public sealed class RetrievalChunkCompiler
             return Convert.ToHexString(bytes).ToLowerInvariant();
         }
 
+        string Norm(string? input) => _textNormalizer.Normalize(input);
+
+        static bool HasText(string? s) => !string.IsNullOrWhiteSpace(s);
+
+        static string TrimToSingleSpace(string s) =>
+            System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
+
         // 1) core_task
         {
-            var amb = intent.Ambiguities.Count > 0 ? $"|ambiguities:{string.Join(';', intent.Ambiguities)}" : string.Empty;
-            var domainPart = string.IsNullOrWhiteSpace(intent.Domain) ? string.Empty : $"|domain:{intent.Domain}";
-            var modulePart = string.IsNullOrWhiteSpace(intent.Module) ? string.Empty : $"|module:{intent.Module}";
-            var featurePart = string.IsNullOrWhiteSpace(intent.Feature) ? string.Empty : $"|feature:{intent.Feature}";
-            var goalPart = $"|goal:{intent.Goal}";
-            var text = $"core_task|task_type:{intent.TaskType}{domainPart}{modulePart}{featurePart}{goalPart}{amb}";
+            // Natural compact retrieval text (no pseudo-schema markers).
+            // Preferred order: feature, module, goal (only if feature/module absent), then domain only when needed.
+            var parts = new List<string>();
+            if (HasText(intent.Feature)) parts.Add(Norm(intent.Feature));
+            if (HasText(intent.Module)) parts.Add(Norm(intent.Module));
+
+            if (parts.Count == 0)
+                parts.Add(Norm(intent.Goal));
+
+            if (parts.Count <= 1 && HasText(intent.Domain))
+            {
+                // Keep domain only for clarity.
+                parts.Add("in " + Norm(intent.Domain));
+            }
+
+            var text = TrimToSingleSpace(string.Join(" ", parts.Where(p => !string.IsNullOrWhiteSpace(p))));
             chunks.Add(new RetrievalChunk(
                 ChunkId: MakeChunkId(intent.SessionId, intent.TaskId, "core_task"),
                 ChunkType: ChunkType.CoreTask,
@@ -51,7 +69,7 @@ public sealed class RetrievalChunkCompiler
         {
             if (string.IsNullOrWhiteSpace(hc))
                 continue;
-            var text = $"constraint|{hc}";
+            var text = Norm(hc);
             chunks.Add(new RetrievalChunk(
                 ChunkId: MakeChunkId(intent.SessionId, intent.TaskId, "constraint:" + hc),
                 ChunkType: ChunkType.Constraint,
@@ -65,7 +83,7 @@ public sealed class RetrievalChunkCompiler
         {
             if (string.IsNullOrWhiteSpace(r))
                 continue;
-            var text = $"risk|{r}";
+            var text = Norm(r);
             chunks.Add(new RetrievalChunk(
                 ChunkId: MakeChunkId(intent.SessionId, intent.TaskId, "risk:" + r),
                 ChunkType: ChunkType.Risk,
@@ -85,7 +103,7 @@ public sealed class RetrievalChunkCompiler
             {
                 if (string.IsNullOrWhiteSpace(op))
                     continue;
-                var text = $"pattern|{op}";
+                var text = Norm(op);
                 chunks.Add(new RetrievalChunk(
                     ChunkId: MakeChunkId(intent.SessionId, intent.TaskId, "pattern:" + op),
                     ChunkType: ChunkType.Pattern,
@@ -107,7 +125,7 @@ public sealed class RetrievalChunkCompiler
                 (h.Contains("allowed", StringComparison.OrdinalIgnoreCase) ||
                  h.Contains("permit", StringComparison.OrdinalIgnoreCase)));
 
-            var likelyLayers = scopes.Layers.Count > 0 ? scopes.Layers.ToArray() : intent.RetrievalFocuses.ToArray();
+            var likelyLayers = scopes.Layers.Count > 0 ? scopes.Layers.ToArray() : intent.CandidateLayers.ToArray();
             var signature = new SimilarCaseSignature(
                 TaskType: intent.TaskType,
                 FeatureShape: intent.Feature ?? intent.Module ?? "unspecified",
@@ -116,11 +134,8 @@ public sealed class RetrievalChunkCompiler
                 RiskSignals: intent.RiskSignals,
                 Complexity: intent.Complexity);
 
-            // Keep chunk.Text compact; the structured SimilarCase signature is carried separately.
-            var likely = string.Join(",", signature.LikelyLayers.Take(4));
-            var risk = string.Join(",", signature.RiskSignals.Take(4));
-            var text =
-                $"similar_case|task_type:{signature.TaskType}|feature_shape:{signature.FeatureShape}|engine_change_allowed:{signature.EngineChangeAllowed}|likely_layers:{likely}|risk_signals:{risk}|complexity:{signature.Complexity}";
+            // Natural compact query derived from signature.
+            var text = SimilarCaseQueryTextBuilder.Build(signature);
 
             chunks.Add(new RetrievalChunk(
                 ChunkId: MakeChunkId(intent.SessionId, intent.TaskId, "similar_case"),

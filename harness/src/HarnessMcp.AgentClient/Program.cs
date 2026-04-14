@@ -13,6 +13,12 @@ try
     if (string.Equals(command, "plan-task", StringComparison.OrdinalIgnoreCase))
         return await PlanTaskCommand.RunAsync(argsList.Skip(1).ToArray(), CancellationToken.None).ConfigureAwait(false);
 
+    if (string.Equals(command, "describe-protocol", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Out.WriteLine(DescribeProtocolCommand.GetProtocolJson());
+        return 0;
+    }
+
     Console.Error.WriteLine($"Unknown command: {command}");
     return 1;
 }

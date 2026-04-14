@@ -16,7 +16,8 @@ public sealed class WorkerPacketBuilder
         if (!string.IsNullOrWhiteSpace(requirementIntent.Module)) allowedScope.Add("module:" + requirementIntent.Module);
         if (!string.IsNullOrWhiteSpace(requirementIntent.Feature)) allowedScope.Add("feature:" + requirementIntent.Feature);
 
-        foreach (var l in requirementIntent.CandidateLayers.Concat(requirementIntent.RetrievalFocuses).Where(l => !string.IsNullOrWhiteSpace(l)).Distinct(StringComparer.OrdinalIgnoreCase))
+        // Allowed scope layers come only from CandidateLayers (not RetrievalFocuses).
+        foreach (var l in requirementIntent.CandidateLayers.Where(l => !string.IsNullOrWhiteSpace(l)).Distinct(StringComparer.OrdinalIgnoreCase))
             allowedScope.Add("layer:" + l.Trim());
 
         var forbiddenActions = new List<string>

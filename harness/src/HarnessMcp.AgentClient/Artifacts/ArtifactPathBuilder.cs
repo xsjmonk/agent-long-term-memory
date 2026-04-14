@@ -14,5 +14,6 @@ public sealed class ArtifactPathBuilder
     public string ExecutionPlanJson(string outputDir) => Path.Combine(outputDir, "09-execution-plan.json");
     public string ExecutionPlanMd(string outputDir) => Path.Combine(outputDir, "10-execution-plan.md");
     public string WorkerPacketMd(string outputDir) => Path.Combine(outputDir, "11-worker-packet.md");
+    public string HarnessRunManifestJson(string outputDir) => Path.Combine(outputDir, "12-harness-run-manifest.json");
 }
 

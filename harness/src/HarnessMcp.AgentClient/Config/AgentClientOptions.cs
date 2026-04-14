@@ -15,5 +15,7 @@ public sealed record AgentClientOptions(
     string? Domain,
     int MaxItemsPerChunk,
     AuthorityLevel MinimumAuthority,
-    bool EmitIntermediates);
+    bool EmitIntermediates,
+    bool StdoutJson,
+    bool PrintWorkerPacket);
 
