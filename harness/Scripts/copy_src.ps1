@@ -1,69 +1,95 @@
 param(
-    [string]$ZipFileName = "harness_src.zip",
-    [string[]]$ExcludeDirectories = @(
-        "bin",
-        "obj",
-        ".vs",
-        ".idea",
-        ".pytest_cache",
-        "TestResults",
-        "TestResult",
-        "coverage",
-        "artifacts",
-        "Release",
-        "Debug",
-        "publish",
-        "_output",
-        "out",
-        ".git",
-        ".github"
-    )
+    [string]$ZipFileName = "harness_src.zip"
 )
 
 $ErrorActionPreference = "Stop"
 
-# "current running folder" == script working directory.
-$sourceRoot = (Get-Location).Path
-$zipPath = Join-Path $sourceRoot $ZipFileName
+# Target is always the harness folder (script lives under harness/Scripts).
+$harnessRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path.TrimEnd('\', '/')
 
+# "current running folder" == where the zip is written.
+$zipPath = Join-Path (Get-Location).Path $ZipFileName
 if (Test-Path $zipPath) {
     Remove-Item -Force $zipPath
 }
+
+# Exclude these directories entirely (build outputs, caches, VCS metadata).
+$excludeDirNames = @(
+    "bin",
+    "obj",
+    "Release",
+    "Debug",
+    "publish",
+    "TestResults",
+    "TestResult",
+    "coverage",
+    "artifacts",
+    ".vs",
+    ".idea",
+    ".pytest_cache",
+    ".git",
+    ".github"
+)
+
+# Only include source-code-like files.
+$includeExtensions = @(
+    ".cs",
+    ".csproj",
+    ".props",
+    ".targets",
+    ".sln",
+    ".md",
+    ".txt",
+    ".json",
+    ".ps1",
+    ".yml",
+    ".yaml",
+    ".editorconfig",
+    ".gitignore",
+    ".xml"
+)
 
 $tempRoot = Join-Path $env:TEMP ("copy_src_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
 try {
-    # Stage copy into temp dir (preserve structure) while excluding build folders.
-    $tempCopyRoot = Join-Path $tempRoot "src_copy"
-    New-Item -ItemType Directory -Path $tempCopyRoot -Force | Out-Null
+    $stageRoot = Join-Path $tempRoot "harness_src"
+    New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
 
-    # Build robocopy args to exclude directories.
-    $xdArgs = @()
-    foreach ($d in $ExcludeDirectories) {
-        # robocopy expects raw names (not full paths)
-        $xdArgs += "/XD"
-        $xdArgs += $d
+    $files = Get-ChildItem -Path $harnessRoot -Recurse -File -Force
+
+    foreach ($f in $files) {
+        # Skip excluded directory names.
+        $segments = $f.FullName.Split([System.IO.Path]::DirectorySeparatorChar, [System.StringSplitOptions]::RemoveEmptyEntries)
+        $skip = $false
+        foreach ($seg in $segments) {
+            if ($excludeDirNames -contains $seg) { $skip = $true; break }
+        }
+        if ($skip) { continue }
+
+        $ext = $f.Extension.ToLowerInvariant()
+        if (-not ($includeExtensions -contains $ext)) { continue }
+
+        $fPath = $f.FullName
+        if ($fPath.StartsWith($harnessRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $relative = $fPath.Substring($harnessRoot.Length).TrimStart('\', '/')
+        }
+        else {
+            $relative = $f.Name
+        }
+        $dest = Join-Path $stageRoot $relative
+        $destDir = Split-Path $dest -Parent
+        if ([string]::IsNullOrWhiteSpace($destDir)) { continue }
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+
+        Copy-Item -Path $f.FullName -Destination $dest -Force
     }
 
-    # Copy everything under sourceRoot into tempCopyRoot, excluding directories above.
-    # /E copies subdirectories including empty ones.
-    # /Z allows restartable mode (best-effort for large copies).
-    # /NFL /NDL reduce verbosity.
-    $null = & robocopy $sourceRoot $tempCopyRoot /E /Z /NFL /NDL /R:2 /W:1 @xdArgs
-
-    # Zip staged content.
-    # Place files under a top-level folder inside the zip.
-    $stagedTop = Join-Path $tempCopyRoot (Split-Path $tempCopyRoot -Leaf)
-    if (-not (Test-Path $stagedTop)) {
-        # robocopy copies contents directly; stage root is $tempCopyRoot.
-        $stagedTop = $tempCopyRoot
-    }
-
-    Compress-Archive -Path (Join-Path $tempCopyRoot "*") -DestinationPath $zipPath -Force
+    Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $zipPath -Force
 }
 finally {
-    # Clean temporary folder and files.
     if (Test-Path $tempRoot) {
         Remove-Item -Recurse -Force $tempRoot
     }
