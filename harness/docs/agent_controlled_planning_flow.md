@@ -1,82 +1,149 @@
 # Agent-Controlled Planning Flow
 
-## Overview
-
-This document describes the planning flow where the agent performs all actual work while the harness controls step order and validates submissions.
-
 ## Architecture Layers
 
 | Layer | Responsibility |
-|-------|----------------|
-| User | Provides task in agent UI |
-| Skills/Rules | Define process and when harness is mandatory |
-| Harness | Controls sequence, validates artifacts, records state |
-| Agent | Performs each required step, calls MCP when instructed |
-| MCP Server | Provides long-term memory tools |
-| Execution Agent | Executes approved worker packet later |
+|---|---|
+| User | Provides the task in the agent UI |
+| Skills / Rules | Define the process and when harness is mandatory |
+| Harness | Controls sequence, emits next action, validates artifacts, records state |
+| Agent | Performs each required step, calls MCP when instructed, generates plan |
+| MCP Server | Provides long-term memory retrieval tools |
+| Execution Agent | Executes the approved WorkerExecutionPacket later |
 
-## User-to-Agent Flow
+The harness is a **control plane only**. It does not call any LLM API or MCP tool.
 
-1. User describes a task to the agent
-2. Agent determines if task is trivial or non-trivial
-3. For non-trivial tasks, agent invokes the harness control plane
+---
 
-## Harness Control Plane
+## Skill Files (Canonical Set)
 
-The harness does NOT:
-- Call any LLM API
-- Call any MCP client directly
-- Generate execution plans
-- Generate worker packets
-- Perform memory retrieval
+Skills define when and how the harness is used. The canonical skill set under `.cursor/rules/` is:
 
-The harness DOES:
-- Control step order (stage sequential validation)
-- Validate submitted artifacts
-- Record session state
-- Return machine-readable nextAction
+| File | Purpose |
+|---|---|
+| `04-harness-skill-activation.mdc` | Semantic planning-intent detection gate |
+| `00-harness-control-plane.mdc` | Mandatory harness-first planning loop |
+| `01-harness-failure.mdc` | Hard-stop behavior on harness errors |
+| `03-harness-mcp-tool-calling.mdc` | Exact MCP tool invocation during planning |
+| `02-harness-execution.mdc` | Constrained execution from WorkerExecutionPacket |
 
-## Step Protocol
+### Activation Skill (`04-harness-skill-activation.mdc`)
 
-1. **Start Session**: Agent calls `start-session` with raw task
-2. **Read Next Action**: Extract `nextAction` from response
-3. **Perform Action**: Agent does ONLY what nextAction specifies
-4. **Submit Result**: Agent calls `submit-step-result` with produced artifact
-5. **Validate**: Harness validates and advances to next stage
-6. **Repeat**: Continue until `stage: complete`
+The activation skill is the semantic gate. It activates for:
 
-## MCP Invocation
+- Non-trivial implementation, design, refactoring, migration, or debugging tasks
+- Requests for plan, approach, strategy, outline, or decomposition
+- Tasks where plan quality matters before execution begins
 
-The agent calls MCP tools ONLY when the harness specifies:
-- `agent_call_mcp_retrieve_memory_by_chunks`
-- `agent_call_mcp_merge_retrieval_results`
-- `agent_call_mcp_build_memory_context_pack`
+It does NOT activate for:
+- Casual questions, explanations, or trivial single-line changes
+- Direct execution of an already accepted WorkerExecutionPacket
 
-The harness returns the tool name and request skeleton in the payload.
-Agent executes the tool, receives the result, and submits it back to harness.
+Activation is **semantic, not lexical**. The meaning and context decide activation, not keyword presence.
 
-## Completion
+---
 
-Planning is complete when:
-1. RequirementIntent accepted
-2. RetrievalChunkSet accepted
-3. ChunkQualityReport accepted
-4. RetrieveMemoryByChunksResponse accepted
-5. MergeRetrievalResultsResponse accepted
-6. BuildMemoryContextPackResponse accepted
-7. ExecutionPlan accepted
-8. WorkerExecutionPacket accepted
+## The Planning Loop
 
-The final response contains:
-- `stage: complete`
-- `nextAction: complete`
-- `payload.executionPlan`
-- `payload.workerExecutionPacket`
+```text
+User
+  -> Agent detects planning intent (04-harness-skill-activation.mdc)
+  -> Agent activates planning skill (00-harness-control-plane.mdc)
+  -> Agent: Scripts\invoke-harness-control-plane.ps1 start-session --rawTask "..."
+  <- Harness: nextAction = agent_generate_requirement_intent
 
-## Execution Agent
+  -> Agent generates RequirementIntent
+  -> Agent: submit-step-result (RequirementIntent)
+  <- Harness: nextAction = agent_generate_retrieval_chunk_set
 
-The execution agent receives the accepted WorkerExecutionPacket and:
-- Executes steps exactly as specified
-- Does NOT retrieve memory independently
-- Does NOT expand scope beyond listed steps
-- Reports blocks instead of inventing behavior
+  -> Agent generates RetrievalChunkSet
+  -> Agent: submit-step-result (RetrievalChunkSet)
+  <- Harness: nextAction = agent_validate_chunk_quality
+
+  -> Agent validates chunk quality, produces ChunkQualityReport
+  -> Agent: submit-step-result (ChunkQualityReport)
+  <- Harness: nextAction = agent_call_mcp_retrieve_memory_by_chunks
+              toolName = retrieve_memory_by_chunks
+              payload.request = { exact request skeleton }
+
+  -> Agent calls MCP tool retrieve_memory_by_chunks with payload.request exactly
+  -> Agent: submit-step-result (raw MCP result)
+  <- Harness: nextAction = agent_call_mcp_merge_retrieval_results
+              toolName = merge_retrieval_results
+
+  -> Agent calls MCP tool merge_retrieval_results
+  -> Agent: submit-step-result (raw MCP result)
+  <- Harness: nextAction = agent_call_mcp_build_memory_context_pack
+              toolName = build_memory_context_pack
+
+  -> Agent calls MCP tool build_memory_context_pack
+  -> Agent: submit-step-result (raw MCP result)
+  <- Harness: nextAction = agent_generate_execution_plan
+
+  -> Agent generates ExecutionPlan from all accepted artifacts
+  -> Agent: submit-step-result (ExecutionPlan)
+  <- Harness: nextAction = agent_generate_worker_execution_packet
+
+  -> Agent generates WorkerExecutionPacket
+  -> Agent: submit-step-result (WorkerExecutionPacket)
+  <- Harness: stage = complete, nextAction = complete
+              completionArtifacts = { executionPlan, workerExecutionPacket }
+
+  -> Agent shows ExecutionPlan and WorkerExecutionPacket to user
+  -> User may use WorkerExecutionPacket in an execution agent
+```
+
+---
+
+## Error Handling
+
+If any artifact fails validation:
+
+1. Harness returns `success: false`, `stage: error`, `nextAction: stop_with_error`
+2. Agent stops immediately (see `01-harness-failure.mdc`)
+3. Agent surfaces harness errors verbatim to the user
+4. Agent fixes only the failing artifact
+5. Agent resubmits the same stage with the corrected artifact
+
+The agent must never continue speculatively after a harness error.
+
+---
+
+## MCP Invocation Rules
+
+The harness returns explicit `toolName` (at top level) and `payload.request` for each MCP stage. The agent:
+
+1. Reads `toolName` from the harness response
+2. Uses `payload.request` exactly as the MCP tool input — no modification
+3. Submits the raw MCP result back to harness without modification
+
+The agent must not call MCP at any other time during planning.
+
+---
+
+## Execution Phase (Post-Planning)
+
+After planning completes:
+
+1. User has an accepted `WorkerExecutionPacket`
+2. Execution agent uses `02-harness-execution.mdc`
+3. Execution agent follows the packet exactly:
+   - No replanning
+   - No independent memory retrieval
+   - No scope expansion
+   - Report blocks rather than guessing
+
+The execution phase is separate from planning. Harness is not involved during execution.
+
+---
+
+## Key Design Decisions
+
+- **Harness is control-plane only**: no LLM API, no MCP client, no autonomous loops
+- **Skills define the semantic flow**: activation, harness loop, failure handling, MCP, execution
+- **One strict entrypoint**: `Scripts\invoke-harness-control-plane.ps1`
+- **Canonical contracts per stage**: one artifact schema per stage, validated strictly
+- **Hard stops on error**: agent must stop and resubmit, never continue speculatively
+- **MCP is agent-executed**: harness instructs the tool name and request; agent calls; result is submitted back
+- **Completion requires all stages**: no shortcuts, no stage skipping
+- **Generic agent design**: skills work with any agent, not tied to a specific product

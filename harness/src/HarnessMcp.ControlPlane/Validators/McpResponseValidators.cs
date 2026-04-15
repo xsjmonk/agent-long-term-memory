@@ -184,7 +184,8 @@ public class MergeRetrievalResultsResponseValidator
 
 public class BuildMemoryContextPackResponseValidator
 {
-    private static readonly string[] RequiredPackSections = { "must_follow", "best_practices", "avoid", "similar_case_guidance", "retrieval_support" };
+    // Arrays in memory_context_pack (retrieval_support is an object, validated separately)
+    private static readonly string[] RequiredArraySections = { "must_follow", "best_practices", "avoid", "similar_case_guidance" };
     private static readonly string[] RequiredRetrievalSupport = { "multi_supported_items", "single_route_important_items" };
 
     public ValidationResult Validate(object? value)
@@ -214,12 +215,14 @@ public class BuildMemoryContextPackResponseValidator
             return new ValidationResult { IsValid = false, Errors = errors };
         }
 
-        foreach (var section in RequiredPackSections)
+        // Validate array sections
+        foreach (var section in RequiredArraySections)
         {
             if (!mcp.TryGetProperty(section, out var field) || field.ValueKind != JsonValueKind.Array)
                 errors.Add($"memory_context_pack.{section} array is required");
         }
 
+        // Validate retrieval_support as an object with required sub-arrays
         if (mcp.TryGetProperty("retrieval_support", out var rs) && rs.ValueKind == JsonValueKind.Object)
         {
             foreach (var subfield in RequiredRetrievalSupport)

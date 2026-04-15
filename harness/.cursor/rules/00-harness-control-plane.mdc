@@ -1,0 +1,232 @@
+---
+description: Primary harness control-plane planning skill. Activates for planning-intent tasks. Enforces the harness-first planning loop for any non-trivial design, implementation, refactor, or debugging task.
+globs:
+alwaysApply: false
+---
+
+# Harness Control-Plane Planning Skill
+
+## Purpose
+
+This is the primary operational planning skill for a generic agent. It defines the mandatory harness-first planning loop. It works together with:
+
+- `04-harness-skill-activation.mdc` — decides when this skill is active
+- `01-harness-failure.mdc` — mandatory behavior on harness errors
+- `03-harness-mcp-tool-calling.mdc` — mandatory MCP stage behavior
+
+When the activation skill (`04-harness-skill-activation.mdc`) determines planning intent is present, this skill is mandatory.
+
+---
+
+## Mandatory Rule 1: Use Only the Canonical Harness Entrypoint
+
+The ONLY supported harness entrypoint for planning mode is:
+
+```
+Scripts\invoke-harness-control-plane.ps1
+```
+
+NEVER use:
+- Direct invocation of the harness executable
+- Old planner commands or legacy entrypoints
+- Any undocumented or alternative path
+- Any bypassed or shortcut invocation
+
+This is an absolute requirement. Any entrypoint other than `Scripts\invoke-harness-control-plane.ps1` is invalid.
+
+---
+
+## Mandatory Rule 2: Start Every Planning Session with `start-session`
+
+Before producing any planning artifact, start a harness session:
+
+```
+Scripts\invoke-harness-control-plane.ps1 start-session --rawTask "<user task here>"
+```
+
+The harness returns:
+- `sessionId` — required for all subsequent calls
+- `stage` — current stage name
+- `nextAction` — what the agent must do next
+- `inputContract` — artifact type and schema required
+
+Do not produce any artifact before reading `nextAction`.
+
+---
+
+## Mandatory Rule 3: Follow the Harness Loop Exactly
+
+The mandatory loop is:
+
+1. Call `start-session` → read `nextAction`
+2. Perform ONLY the action named in `nextAction`
+3. Produce the artifact type specified in `inputContract.artifactType`
+4. Save the artifact to a file
+5. Submit it back to harness using:
+   ```
+   Scripts\invoke-harness-control-plane.ps1 submit-step-result --sessionId <id> --completedAction <nextAction> --artifactFile <artifact.json>
+   ```
+6. Read the new `nextAction`
+7. Repeat until `stage == complete` or `nextAction == stop_with_error`
+
+**Critical**: submit it back to harness after every artifact. Never proceed to the next stage without harness approval.
+
+---
+
+## Mandatory Rule 4: NEVER Skip Stages
+
+Complete all stages in the exact canonical order. You may not skip any stage.
+
+Canonical stage order:
+1. `need_requirement_intent`
+2. `need_retrieval_chunk_set`
+3. `need_retrieval_chunk_validation`
+4. `need_mcp_retrieve_memory_by_chunks`
+5. `need_mcp_merge_retrieval_results`
+6. `need_mcp_build_memory_context_pack`
+7. `need_execution_plan`
+8. `need_worker_execution_packet`
+9. `complete`
+
+**NEVER skip stages.** Do not jump from any stage to a later stage. Do not infer that a stage is unnecessary.
+
+---
+
+## Mandatory Rule 5: Never Generate Artifacts Before Their Stage
+
+Do not generate or produce:
+- `RetrievalChunkSet` before harness reaches `need_retrieval_chunk_set`
+- `ExecutionPlan` before harness reaches `need_execution_plan`
+- `WorkerExecutionPacket` before harness reaches `need_worker_execution_packet`
+
+If you already know what the plan should look like — hold it. Generate only what harness currently requests in `nextAction`.
+
+---
+
+## Mandatory Rule 6: Never Batch Stages
+
+Never submit two or more artifacts in a single harness call. Each stage requires:
+1. One agent action
+2. One `submit-step-result` call
+
+Batching is forbidden.
+
+---
+
+## Mandatory Rule 7: No Execution Work During Planning
+
+The planning session produces `ExecutionPlan` and `WorkerExecutionPacket` only. During planning, do not:
+- Write implementation code
+- Create or modify project files
+- Make actual code changes
+- Run tests or build commands
+- Perform deployment actions
+
+---
+
+## Mandatory Rule 8: Call MCP Only When Harness Instructs
+
+You may call MCP tools only when harness `nextAction` is one of:
+- `agent_call_mcp_retrieve_memory_by_chunks`
+- `agent_call_mcp_merge_retrieval_results`
+- `agent_call_mcp_build_memory_context_pack`
+
+See `03-harness-mcp-tool-calling.mdc` for exact MCP behavior.
+
+Do not call MCP at any other point during planning.
+
+---
+
+## Mandatory Rule 9: Stop Immediately on Harness Error
+
+If harness returns `success: false`, `stage: error`, or `nextAction: stop_with_error`, see `01-harness-failure.mdc`. Do not continue without resolving the error.
+
+---
+
+## Completion Rule
+
+When harness returns `stage: complete`:
+1. Show the accepted `ExecutionPlan` to the user
+2. Show the accepted `WorkerExecutionPacket` to the user
+3. Planning is complete
+4. Hand off to execution phase if the user requests it
+
+---
+
+## Forbidden Behaviors (Hard Rules)
+
+The following are prohibited at all times during planning mode:
+
+- **NEVER** use any entrypoint other than `Scripts\invoke-harness-control-plane.ps1`
+- **NEVER** skip stages or jump ahead in the canonical stage order
+- **NEVER** batch multiple stages into one harness call
+- **NEVER** generate an `ExecutionPlan` before harness reaches `need_execution_plan`
+- **NEVER** generate a `WorkerExecutionPacket` before harness reaches `need_worker_execution_packet`
+- **NEVER** call MCP without explicit harness instruction
+- **NEVER** continue after `nextAction: stop_with_error`
+- **NEVER** produce an artifact without submitting it via `submit-step-result`
+- **NEVER** do implementation work during planning mode
+- **NEVER** invoke old planner runtime behavior or legacy agent client commands
+
+---
+
+## Artifact Canonical Forms
+
+### RequirementIntent
+```json
+{
+  "task_id": "unique-id",
+  "task_type": "ui-change|backend-change|refactor|bugfix|design|migration",
+  "goal": "what to achieve",
+  "hard_constraints": ["constraint 1"],
+  "risk_signals": ["risk area 1"],
+  "complexity": "low|medium|high"
+}
+```
+
+### RetrievalChunkSet
+```json
+{
+  "task_id": "unique-id",
+  "complexity": "low|medium|high",
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." },
+    { "chunk_id": "c2", "chunk_type": "constraint", "text": "..." }
+  ]
+}
+```
+Chunk types: `core_task`, `constraint`, `risk`, `pattern`, `similar_case`
+
+### ExecutionPlan
+```json
+{
+  "task_id": "unique-id",
+  "task": "what to achieve",
+  "scope": "affected areas and layers",
+  "constraints": ["preserved constraint 1"],
+  "forbidden_actions": ["action not allowed"],
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Step name",
+      "actions": ["what to do"],
+      "outputs": ["what is produced"],
+      "acceptance_checks": ["how to verify"]
+    }
+  ],
+  "deliverables": ["final output 1"]
+}
+```
+
+### WorkerExecutionPacket
+```json
+{
+  "goal": "what to achieve",
+  "scope": "affected areas and layers",
+  "hard_constraints": ["constraint 1"],
+  "forbidden_actions": ["action not allowed"],
+  "execution_rules": ["Do NOT retrieve long-term memory independently. Do NOT replan."],
+  "steps": [ ... ],
+  "required_output_sections": ["per_step_results", "final_deliverables", "validation_summary"]
+}
+```

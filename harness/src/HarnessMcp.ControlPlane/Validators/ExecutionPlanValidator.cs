@@ -22,30 +22,39 @@ public class ExecutionPlanValidator
             return new ValidationResult { IsValid = false, Errors = new() { "ExecutionPlan must be a JSON object" } };
         }
 
-        if (!element.TryGetProperty("objective", out var objective) || string.IsNullOrEmpty(objective.GetString()))
-            errors.Add("objective is required and must be non-empty");
+        // Canonical required fields per design
+        if (!element.TryGetProperty("task_id", out var taskId) || string.IsNullOrEmpty(taskId.GetString()))
+            errors.Add("task_id is required and must be non-empty");
+
+        if (!element.TryGetProperty("task", out var task) || string.IsNullOrEmpty(task.GetString()))
+            errors.Add("task is required and must be non-empty");
+
+        if (!element.TryGetProperty("scope", out var scopeElement) || string.IsNullOrEmpty(scopeElement.GetString()))
+            errors.Add("scope is required and must be non-empty");
 
         if (!element.TryGetProperty("deliverables", out var deliverables) || deliverables.ValueKind != JsonValueKind.Array || deliverables.GetArrayLength() == 0)
             errors.Add("deliverables array is required and must not be empty");
 
+        if (!element.TryGetProperty("forbidden_actions", out var forbiddenActions) || forbiddenActions.ValueKind != JsonValueKind.Array)
+            errors.Add("forbidden_actions array is required");
+
         if (!element.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
         {
-            return new ValidationResult { IsValid = false, Errors = new() { "steps array is required" } };
+            errors.Add("steps array is required");
+            return new ValidationResult { IsValid = false, Errors = errors };
         }
 
         var steps = stepsElement.EnumerateArray().ToList();
         if (steps.Count == 0)
-            return new ValidationResult { IsValid = false, Errors = new() { "at least one step is required" } };
+        {
+            errors.Add("at least one step is required");
+            return new ValidationResult { IsValid = false, Errors = errors };
+        }
 
         if (steps.Count > _options.MaxPlanSteps)
             warnings.Add($"step count {steps.Count} exceeds recommended max {_options.MaxPlanSteps}");
 
-        if (!element.TryGetProperty("scope", out var scopeElement) || string.IsNullOrEmpty(scopeElement.GetString()))
-        {
-            errors.Add("scope field is required and must be non-empty");
-        }
-
-        var stepNumbers = new HashSet<int>();
+        // Constraints: required if RequirementIntent had hard_constraints
         var hardConstraints = new List<string>();
 
         if (requirementIntent is JsonElement riElement && riElement.TryGetProperty("hard_constraints", out var hcElement))
@@ -80,6 +89,8 @@ public class ExecutionPlanValidator
                 }
             }
         }
+
+        var stepNumbers = new HashSet<int>();
 
         for (int i = 0; i < steps.Count; i++)
         {
@@ -118,7 +129,7 @@ public class ExecutionPlanValidator
             }
 
             if (!step.TryGetProperty("acceptance_checks", out var ac))
-                errors.Add($"step {stepNumber} missing acceptance_checks (not acceptance_criteria)");
+                errors.Add($"step {stepNumber} missing acceptance_checks");
 
             if (ac.ValueKind == JsonValueKind.Array && ac.GetArrayLength() == 0)
                 errors.Add($"step {stepNumber} must have at least one acceptance_check");
@@ -130,6 +141,7 @@ public class ExecutionPlanValidator
                         errors.Add($"step {stepNumber} acceptance_checks must be non-empty strings");
             }
 
+            // Detect worker-side memory retrieval instructions
             var stepText = step.GetRawText().ToLowerInvariant();
             if (stepText.Contains("retrieve") && (stepText.Contains("memory") || stepText.Contains("mcp")))
             {
@@ -137,7 +149,7 @@ public class ExecutionPlanValidator
                     errors.Add($"step {stepNumber} instructs worker-side memory retrieval - forbidden in planning phase");
             }
 
-            if (stepText.Contains("reinterpret") || stepText.Contains("reinterpret") || stepText.Contains("change architecture") || stepText.Contains("modify architecture") || stepText.Contains("re-architect"))
+            if (stepText.Contains("reinterpret") || stepText.Contains("change architecture") || stepText.Contains("modify architecture") || stepText.Contains("re-architect"))
             {
                 errors.Add($"step {stepNumber} instructs architecture reinterpretation - forbidden");
             }

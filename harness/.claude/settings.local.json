@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet test *)",
+      "Bash(dotnet build *)",
+      "Bash(ls /c/Docs/工作笔记/Hackthon/2026/harness/tests/HarnessMcp.ControlPlane.Tests/*.cs)"
+    ]
+  }
+}
