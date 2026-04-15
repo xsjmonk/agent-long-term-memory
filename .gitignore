@@ -39,3 +39,4 @@ Release/
 temp/
 %temp%/
 sessions/
+/docs/Prompt_history.md
