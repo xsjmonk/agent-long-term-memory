@@ -1,0 +1,270 @@
+# Harness Control Plane - Primary Planning Skill
+
+This is the primary operational skill for the Planning Agent. It defines the mandatory harness-first flow.
+
+## Scope: When to Use This Skill
+
+### Harness is MANDATORY for non-trivial tasks:
+- Implementation tasks (new features, bug fixes)
+- Refactoring that changes behavior
+- Debugging with investigation required
+- Architecture or design tasks
+- Any task involving repository code changes
+- Any task where long-term memory retrieval may improve output quality
+
+### Harness is OPTIONAL for trivial tasks:
+- Simple explanation of existing code
+- Tiny single-line rewrites
+- Answer-only questions with no code changes
+
+> **When in doubt, treat as non-trivial and use harness.**
+
+## Single Entrypoint Rule
+
+### ONLY THIS ENTRYPOINT IS SUPPORTED:
+```
+Scripts\invoke-harness-control-plane.ps1
+```
+
+The agent MUST use exactly this script path. It is the ONLY supported harness entrypoint.
+
+### NEVER use any of these:
+- Direct harness.exe calls
+- `dotnet run` on HarnessMcp.ControlPlane
+- Any other PowerShell scripts in Scripts/ directory
+- Old planner command paths like `plan-task`
+- Any MCP server entrypoint except as instructed by harness
+
+## Mandatory Submit-After-Every-Stage Rule
+
+### THE CORE LOOP - EXACTLY THIS:
+
+1. **Start session with wrapper:**
+   ```powershell
+   Scripts\invoke-harness-control-plane.ps1 -Command start-session -RawTask "..."
+   ```
+
+2. **Parse response JSON** - Read `nextAction`, `stage`, `payload`, and `toolName`
+
+3. **Perform ONLY the specified action** - No more, no less
+
+4. **Save artifact to file** with canonical structure
+
+5. **Submit artifact back to harness:**
+   ```powershell
+   Scripts\invoke-harness-control-plane.ps1 -Command submit-step-result -SessionId <id> -Action <nextAction> -ArtifactType <type> -ArtifactFile <path>
+   ```
+
+6. **Get response** - If `success=false` or `stage=error`, STOP and fix only the indicated problem
+
+7. **Repeat from step 2** - Continue until `stage=complete` or error
+
+## DO NOT Skip This Loop
+
+- NEVER call harness once and then continue planning independently
+- NEVER "batch" multiple stages together
+- NEVER submit an artifact without first getting the action from harness
+- NEVER skip MCP stages - harness must instruct each tool call
+- NEVER generate execution plan before harness reaches that stage
+- NEVER generate worker packet before harness reaches that stage
+- After EVERYartifact, submit it back and wait for harness response
+- NEVER continue to next stage without harness approval
+
+## Stage-by-Stage Instructions
+
+### Stage 1: `need_requirement_intent`
+**Harness Action:** `agent_generate_requirement_intent`
+
+1. Analyze the raw task from the session
+2. Produce `RequirementIntent` JSON with EXACTLY these fields:
+   - `task_id` (from session response)
+   - `task_type` (e.g., ui-change, backend-change, refactor, bugfix)
+   - `goal` (clear description of what to achieve)
+   - `hard_constraints` (array - can be empty)
+   - `risk_signals` (array - can be empty)
+   - `complexity` (MUST be exactly: low, medium, or high)
+3. Save to file as JSON
+4. Submit to harness with submit-step-result
+
+**Canonical structure:**
+```json
+{
+  "task_id": "session-task-id",
+  "task_type": "...",
+  "goal": "...",
+  "hard_constraints": ["constraint1", "constraint2"],
+  "risk_signals": ["risk1"],
+  "complexity": "low|medium|high"
+}
+```
+
+### Stage 2: `need_retrieval_chunk_set`
+**Harness Action:** `agent_generate_retrieval_chunk_set`
+
+1. Use the ACCEPTED RequirementIntent from previous stage
+2. Generate chunks with these rules:
+   - AT LEAST ONE `core_task` chunk is REQUIRED
+   - If `hard_constraints` array is non-empty, you MUST have at least one `constraint` chunk
+   - If `risk_signals` array is non-empty, you MUST have at least one `risk` chunk
+   - If `complexity` is "medium" or "high", you MUST have at least one `similar_case` chunk
+3. Each chunk MUST have:
+   - Unique `chunk_id` (no duplicates)
+   - Canonical `chunk_type` from: core_task, constraint, risk, pattern, similar_case
+   - `text` field (for all types except similar_case)
+   - `task_shape` object (for similar_case type only)
+
+**Canonical structure:**
+```json
+{
+  "task_id": "...",
+  "complexity": "low|medium|high",
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." },
+    { "chunk_id": "c2", "chunk_type": "constraint", "text": "..." },
+    { "chunk_id": "c3", "chunk_type": "risk", "text": "..." },
+    { "chunk_id": "c4", "chunk_type": "similar_case", "task_shape": {...} }
+  ]
+}
+```
+
+4. Save to file
+5. Submit to harness
+
+### Stage 3: `need_retrieval_chunk_validation`
+**Harness Action:** `agent_validate_chunk_quality`
+
+1. Use the ACCEPTED RetrievalChunkSet from previous stage
+2. Validate and produce `ChunkQualityReport` with EXACTLY these fields:
+   - `isValid` (boolean)
+   - `has_core_task` (boolean)
+   - `has_constraint` (boolean)
+   - `has_risk` (boolean)
+   - `has_pattern` (boolean)
+   - `has_similar_case` (boolean)
+   - `errors` (array - empty if isValid=true)
+   - `warnings` (array - can be empty)
+
+**Rules:**
+- If `isValid=false`, `errors` array MUST be non-empty
+- If chunks missing required types, set appropriate has_* to false
+
+3. Save to file
+4. Submit to harness
+
+### Stage 4: `need_mcp_retrieve_memory_by_chunks`
+**Harness Action:** `agent_call_mcp_retrieve_memory_by_chunks`
+
+**DO NOT PROCEED WITHOUT HARNESS INSTRUCTION**
+
+1. Harness provides `payload.toolName` and `payload.request`
+   - `toolName` MUST be exactly `retrieve_memory_by_chunks`
+   - Use `payload.request` as the request skeleton
+2. Call MCP with that exact tool and request
+3. Submit the RAW MCP response back to harness
+4. **NEVER substitute tools** - Use exactly retrieve_memory_by_chunks
+5. **NEVER skip this stage** - Harness instructs it explicitly
+
+### Stage 5: `need_mcp_merge_retrieval_results`
+**Harness Action:** `agent_call_mcp_merge_retrieval_results`
+
+1. Harness provides `payload.toolName` = `merge_retrieval_results`
+2. Use `payload.request` as request skeleton
+3. Call MCP with that exact tool
+4. Submit RAW MCP response back to harness
+
+### Stage 6: `need_mcp_build_memory_context_pack`
+**Harness Action:** `agent_call_mcp_build_memory_context_pack`
+
+1. Harness provides `payload.toolName` = `build_memory_context_pack`
+2. Use `payload.request` as request skeleton
+3. Call MCP with that exact tool
+4. Submit RAW MCP response back to harness
+
+### Stage 7: `need_execution_plan`
+**Harness Action:** `agent_generate_execution_plan`
+
+**DO NOT PROCEED BEFORE HARNESS REACHES THIS STAGE**
+
+1. Generate execution plan using:
+   - ACCEPTED RequirementIntent
+   - ACCEPTED RetrievalChunkSet
+   - ACCEPTED MemoryContextPack
+2. Plan MUST include EXACTLY these fields:
+   - `objective` (non-empty string)
+   - `scope` (non-empty string)
+   - `constraints` (array - MUST include ALL hard_constraints from RequirementIntent)
+   - `deliverables` (non-empty array)
+   - `steps` (array with consecutive step_number 1, 2, 3...)
+3. Each step MUST have:
+   - `step_number` (consecutive integers starting at 1)
+   - `title` (non-empty string)
+   - `actions` (non-empty array of strings)
+   - `outputs` (non-empty array of strings)
+   - `acceptance_checks` (non-empty array of strings)
+4. **NEVER include text about worker-side memory retrieval** in any step
+5. Save to file
+6. Submit to harness
+
+### Stage 8: `need_worker_execution_packet`
+**Harness Action:** `agent_generate_worker_execution_packet`
+
+**DO NOT PROCEED BEFORE HARNESS REACHES THIS STAGE**
+
+1. Generate worker packet from ACCEPTED ExecutionPlan
+2. Packet MUST include EXACTLY these fields:
+   - `objective` (from plan)
+   - `hard_constraints` (MUST preserve ALL from plan.constraints)
+   - `forbidden_actions` (array)
+   - `execution_rules` (array - MUST explicitly prohibit independent memory retrieval during execution)
+   - `steps` (from plan)
+   - `required_output_sections` (array)
+3. **execution_rules MUST explicitly state that memory retrieval is forbidden during execution**
+4. Save to file
+5. Submit to harness
+
+### Stage 9: Complete
+**When harness returns `stage: complete`:**
+
+1. Show accepted ExecutionPlan to user
+2. Show accepted WorkerExecutionPacket to user
+3. Planning phase is complete
+4. **DO NOT begin implementation work** - Execution happens in separate phase
+5. Hand off to execution agent with the accepted packet
+
+## Forbidden Behavior
+
+### NEVER do ANY of these:
+- Skip stages or do them out of order
+- Call MCP before harness instructs that specific stage
+- Generate ExecutionPlan before stage 7
+- Generate WorkerPacket before stage 8
+- Do implementation work in planning session
+- Fabricate or alter MCP responses
+- Continue after harness returns error without fixing that artifact
+- Use any wrapper script other than the exact path above
+- Use different tool names than those in harness payload
+- Submit "results" instead of "chunk_results" or "merged"
+- Submit non-canonical fields in artifacts
+- Miss required fields in artifacts
+- Show drafts or intermediate artifacts to user
+
+### NEVER produce artifacts with:
+- Alias field names (results, merged_results, context_pack, etc.)
+- Missing required fields
+- Wrong types (string where array expected)
+- Empty arrays where non-empty required
+- Non-consecutive step numbers
+
+## Output Discipline
+
+During planning, show the user ONLY:
+- Harness stage progress (e.g., "Stage 3/9: Validating chunks")
+- Final accepted ExecutionPlan (when stage=complete)
+- Final accepted WorkerExecutionPacket (when stage=complete)
+- Harness errors (verbatim when blocked)
+
+DO NOT show:
+- Draft artifacts
+- Intermediate reasoning
+- Speculative plans
+- MCP responses (except in accepted artifacts)

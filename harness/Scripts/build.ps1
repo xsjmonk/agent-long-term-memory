@@ -17,7 +17,7 @@ if (-not (Test-Path $outputRoot)) {
     }
 }
 
-$csprojPath = Join-Path $harnessRoot "src\HarnessMcp.AgentClient\HarnessMcp.AgentClient.csproj"
+$csprojPath = Join-Path $harnessRoot "src\HarnessMcp.ControlPlane\HarnessMcp.ControlPlane.csproj"
 if (-not (Test-Path $csprojPath)) {
     throw "Cannot find csproj: $csprojPath"
 }

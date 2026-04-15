@@ -1,45 +1,122 @@
-# Harness Execution Rule
+# Harness Execution Skill
 
-## Scope
+This skill applies when the agent is executing implementation work from an accepted `WorkerExecutionPacket`. It constrains the execution agent.
 
-This rule applies when the agent is operating from a worker packet produced by the harness. The worker packet is at the path given by `HarnessRunManifest.workerPacketMarkdownPath` (artifact `11-worker-packet.md`).
+## Prerequisites
 
-## Mandatory Behavior
+This skill applies ONLY when:
+1. Harness returned `stage: complete` in planning
+2. User has provided an accepted `WorkerExecutionPacket`
+3. User is ready for implementation/execution work
 
-When operating from a worker packet, the execution agent MUST:
+## Execution is SEPARATE from Planning
 
-1. Execute the steps listed in the worker packet exactly as specified
-2. Produce per-step execution results (one section per step)
-3. Produce final deliverables matching the `Deliverables` listed in the worker packet
-4. Produce a validation summary (pass/fail against the `AcceptanceChecks` in each step)
-5. Report blocks instead of inventing behavior
+- Planning uses harness to generate ExecutionPlan and WorkerPacket
+- Execution uses the WorkerPacket to perform implementation
+- The two phases MUST NOT overlap
+- Do NOT run planning stages during execution
 
-## Forbidden Behavior
+## Execution Agent Rules
 
-The execution agent MUST NOT:
+### MUST Do:
 
-1. **Do not retrieve long-term memory independently.** All relevant knowledge has already been retrieved and distilled into the `KeyMemory` section of the worker packet. Do not call MCP memory tools.
+1. **Execute steps exactly as specified** in worker packet - no modifications
+2. **Follow step order** - Do steps 1, 2, 3... in sequence
+3. **Produce output sections** exactly as required by `required_output_sections`:
+   - `per_step_results` - One entry per step
+   - `final_deliverables` - Match deliverables from plan
+   - `validation_summary` - Pass/fail for each acceptance_check
+4. **Preserve hard_constraints** from the packet
+5. **Honor forbidden_actions** - Do not touch those areas/components
 
-2. **Do not reinterpret the task at the architecture level.** The task interpretation is fixed in `RequirementIntent`. The execution agent operates within the defined scope.
+### MUST NOT Do:
 
-3. **Do not expand scope beyond the listed steps.** The steps in the worker packet define the complete execution scope. Do not add, remove, or reorder steps.
+#### 1. DO NOT Retrieve Long-Term Memory Independently
 
-4. **Do not generate a replacement plan.** The execution plan was synthesized by the harness. Do not replace it.
+The WorkerPacket already contains all necessary memory context from earlier MCP retrieval stages.
 
-5. **Do not change forbidden layers or components.** The `AllowedScope` section defines what the execution agent may modify. The `ForbiddenActions` section defines what it must not touch.
+- Do NOT call MCP memory tools during execution
+- Do NOT query long-term memory independently
+- The `execution_rules` array explicitly prohibits this - respect it
 
-6. **Do not modify hard constraints.** The `HardConstraints` in the worker packet are non-negotiable. If a constraint conflicts with a step, report the block.
+**This is a HARD prohibition. Breaking it will cause validation failures.**
+
+#### 2. DO NOT Replan or Replace Plan
+
+The ExecutionPlan was already validated by harness.
+
+- Do NOT modify the plan
+- Do NOT generate replacement plan
+- Do NOT skip steps
+- Do NOT add steps
+- Do NOT reorder steps
+
+#### 3. DO NOT Reinterpret Architecture
+
+The task scope was fixed in RequirementIntent.
+
+- Do NOT change component structure
+- Do NOT modify architecture approach
+- Do NOT assume "there is a better way"
+- Do NOT refactor unrelated code
+
+#### 4. DO NOT Expand Scope
+
+The steps define the complete execution scope.
+
+- Do NOT add features not in deliverables
+- Do NOT extend beyond the plan
+- Do NOT add "nice to have" items
+
+#### 5. DO NOT Change Forbidden Actions
+
+The `forbidden_actions` section lists entities that must not be touched.
+
+- Do NOT modify those components
+- Do NOT refactor those areas
+- Do NOT add new code to those files
 
 ## Handling Blocks
 
-If a step is blocked by ambiguity, missing information, or a constraint conflict, the execution agent MUST:
-1. Report the block clearly
-2. Describe what information or decision is needed
-3. Do NOT invent a resolution
+If execution is blocked by ambiguity or missing information:
 
-## Output Requirements
+1. **STOP** - Do NOT proceed past the block
+2. **DESCRIBE** the block clearly
+3. **STATE** what information or decision is needed
+4. **REPORT** to user/supervisor instead of guessing
 
-The execution agent MUST produce output in three sections:
-1. **Per-step execution results** - one section per step from the worker packet
-2. **Final deliverables** - matching the `Deliverables` listed in the worker packet
-3. **Validation summary** - pass/fail status for each `AcceptanceChecks` in each step
+DO NOT:
+- Guess at implementation details
+- Make assumptions about requirements
+- "Just do something" to get unblocked
+
+## Output Sections Required
+
+Produce exactly these sections in your output:
+
+### 1. per_step_results
+One entry per step containing:
+- Step number
+- Actions performed
+- Outputs produced
+- Pass/fail status
+
+### 2. final_deliverables
+Match the deliverables listed in the ExecutionPlan:
+- File changes created/modified
+- Tests added/modified
+- Documentation updates
+
+### 3. validation_summary
+Pass/fail status for each acceptance_check in each step.
+
+## Summary - Execution Agent is Constrained
+
+The execution agent is a constrained automaton:
+- Use ONLY the accepted WorkerPacket
+- Do NOT retrieve memory independently
+- Do NOT replan
+- Do NOT reinterpret architecture
+- Do NOT expand scope
+- Report blocks instead of inventing behavior
+- Honor all constraints and forbidden actions
