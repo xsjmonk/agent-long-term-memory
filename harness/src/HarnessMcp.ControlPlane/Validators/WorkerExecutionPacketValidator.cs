@@ -73,9 +73,10 @@ public class WorkerExecutionPacketValidator
             }
         }
 
-        // Verify hard constraints are preserved from execution plan
+        // Verify hard constraints and forbidden_actions are preserved from execution plan
         if (executionPlan is JsonElement epElement)
         {
+            // Verify constraints preserved
             if (epElement.TryGetProperty("constraints", out var planConstraints) && planConstraints.ValueKind == JsonValueKind.Array && planConstraints.GetArrayLength() > 0)
             {
                 if (element.TryGetProperty("hard_constraints", out var packetConstraints) && packetConstraints.ValueKind == JsonValueKind.Array)
@@ -91,6 +92,27 @@ public class WorkerExecutionPacketValidator
                         if (!string.IsNullOrEmpty(pcStr) && !packetConstraintStrings.Any(pcs => pcs == pcStr || pcs!.Contains(pcStr) || pcStr.Contains(pcs!)))
                         {
                             errors.Add($"hard constraint '{pcStr}' from execution plan must be preserved in worker packet");
+                        }
+                    }
+                }
+            }
+
+            // Verify forbidden_actions preserved from execution plan
+            if (epElement.TryGetProperty("forbidden_actions", out var planForbidden) && planForbidden.ValueKind == JsonValueKind.Array && planForbidden.GetArrayLength() > 0)
+            {
+                if (element.TryGetProperty("forbidden_actions", out var packetForbidden) && packetForbidden.ValueKind == JsonValueKind.Array)
+                {
+                    var packetForbiddenStrings = packetForbidden.EnumerateArray()
+                        .Select(f => f.GetString()?.ToLowerInvariant())
+                        .Where(s => !string.IsNullOrEmpty(s))
+                        .ToList();
+
+                    foreach (var pf in planForbidden.EnumerateArray())
+                    {
+                        var pfStr = pf.GetString()?.ToLowerInvariant();
+                        if (!string.IsNullOrEmpty(pfStr) && !packetForbiddenStrings.Any(pfs => pfs == pfStr || pfs!.Contains(pfStr) || pfStr.Contains(pfs!)))
+                        {
+                            errors.Add($"forbidden action '{pfStr}' from execution plan must be preserved in worker packet");
                         }
                     }
                 }

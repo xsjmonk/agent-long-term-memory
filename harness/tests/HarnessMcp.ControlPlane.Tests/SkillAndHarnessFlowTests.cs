@@ -472,13 +472,14 @@ public class SkillAndHarnessFlowTests : IDisposable
     {
         var validator = new Validators.ExecutionPlanValidator(new ValidationOptions());
 
+        // Canonical plan with non-empty constraints and forbidden_actions as required
         var canonicalPlan = JsonSerializer.Deserialize<JsonElement>(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Add UI feature"",
             ""scope"": ""UI layer only"",
-            ""constraints"": [],
-            ""forbidden_actions"": [],
+            ""constraints"": [""must not modify engine layer""],
+            ""forbidden_actions"": [""modify engine files""],
             ""steps"": [
                 {
                     ""step_number"": 1,
@@ -513,6 +514,293 @@ public class SkillAndHarnessFlowTests : IDisposable
 
         attempt.Success.Should().BeFalse();
         attempt.Stage.Should().Be("error");
+    }
+
+    // ==========================================
+    // Failure-path tests: wrong action hard-stops
+    // ==========================================
+
+    [Fact]
+    public void SkillAndHarness_WrongActionAtStage1_RequirementIntent_HardStops()
+    {
+        var r0 = StartSession("Design the migration");
+        r0.Stage.Should().Be("need_requirement_intent");
+
+        // Submit wrong action (chunk set instead of requirement intent)
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+        });
+
+        attempt.Success.Should().BeFalse("wrong action at need_requirement_intent must hard-stop");
+        attempt.Stage.Should().Be("error");
+        attempt.NextAction.Should().Be(HarnessActionName.StopWithError);
+    }
+
+    [Fact]
+    public void SkillAndHarness_WrongActionAtStage2_RetrievalChunkSet_HardStops()
+    {
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        // Now at need_retrieval_chunk_set
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentValidateChunkQuality,
+            Artifact = new Artifact { ArtifactType = "ChunkQualityReport", Value = JsonSerializer.Deserialize<JsonElement>(@"{""isValid"": true}") }
+        });
+
+        attempt.Success.Should().BeFalse("wrong action at need_retrieval_chunk_set must hard-stop");
+        attempt.Stage.Should().Be("error");
+    }
+
+    [Fact]
+    public void SkillAndHarness_WrongActionAtStage3_ChunkValidation_HardStops()
+    {
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        // Now at need_retrieval_chunk_validation
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+        });
+
+        attempt.Success.Should().BeFalse("wrong action at need_retrieval_chunk_validation must hard-stop");
+        attempt.Stage.Should().Be("error");
+    }
+
+    [Fact]
+    public void SkillAndHarness_WrongActionAtMcpStage_HardStops()
+    {
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        var r3 = SubmitChunkQualityReport(r0.SessionId);
+        r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
+
+        // Submit merge instead of retrieve — harness must hard-stop
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentCallMcpMergeRetrievalResults,
+            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+        });
+
+        attempt.Success.Should().BeFalse("wrong MCP action must hard-stop");
+        attempt.Stage.Should().Be("error");
+    }
+
+    // ==========================================
+    // Failure-path tests: malformed artifacts hard-stop
+    // ==========================================
+
+    [Fact]
+    public void SkillAndHarness_MalformedExecutionPlan_EmptyConstraints_HardStops()
+    {
+        // Navigate to need_execution_plan
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        SubmitChunkQualityReport(r0.SessionId);
+        SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        SubmitMergeRetrievalResultsResponse(r0.SessionId);
+        var r6 = SubmitBuildMemoryContextPackResponse(r0.SessionId);
+        r6.Stage.Should().Be("need_execution_plan");
+
+        // Submit plan with empty constraints — hardened validator must reject
+        var malformedPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""task"": ""Add feature"",
+            ""scope"": ""UI only"",
+            ""constraints"": [],
+            ""forbidden_actions"": [""modify engine""],
+            ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }],
+            ""deliverables"": [""d""]
+        }");
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = malformedPlan }
+        });
+
+        attempt.Success.Should().BeFalse("empty constraints must be rejected — constraints are required non-empty");
+        attempt.Errors.Should().Contain(e => e.Contains("constraints"));
+    }
+
+    [Fact]
+    public void SkillAndHarness_MalformedExecutionPlan_EmptyForbiddenActions_HardStops()
+    {
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        SubmitChunkQualityReport(r0.SessionId);
+        SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        SubmitMergeRetrievalResultsResponse(r0.SessionId);
+        var r6 = SubmitBuildMemoryContextPackResponse(r0.SessionId);
+        r6.Stage.Should().Be("need_execution_plan");
+
+        var malformedPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""task"": ""Add feature"",
+            ""scope"": ""UI only"",
+            ""constraints"": [""must not break engine""],
+            ""forbidden_actions"": [],
+            ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }],
+            ""deliverables"": [""d""]
+        }");
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = malformedPlan }
+        });
+
+        attempt.Success.Should().BeFalse("empty forbidden_actions must be rejected — forbidden_actions is required non-empty");
+        attempt.Errors.Should().Contain(e => e.Contains("forbidden_actions"));
+    }
+
+    [Fact]
+    public void SkillAndHarness_MalformedWorkerPacket_NoMemoryProhibition_HardStops()
+    {
+        // Navigate to need_worker_execution_packet
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        SubmitChunkQualityReport(r0.SessionId);
+        SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        SubmitMergeRetrievalResultsResponse(r0.SessionId);
+        SubmitBuildMemoryContextPackResponse(r0.SessionId);
+        var r7 = SubmitExecutionPlan(r0.SessionId);
+        r7.Stage.Should().Be("need_worker_execution_packet");
+
+        // Packet that doesn't prohibit memory retrieval in execution_rules — must be rejected
+        var malformedPacket = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""goal"": ""Add feature"",
+            ""scope"": ""UI only"",
+            ""hard_constraints"": [""must not change engine""],
+            ""forbidden_actions"": [""modify engine files""],
+            ""execution_rules"": [""follow the plan""],
+            ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }],
+            ""required_output_sections"": [""per_step_results"", ""final_deliverables"", ""validation_summary""]
+        }");
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentGenerateWorkerExecutionPacket,
+            Artifact = new Artifact { ArtifactType = "WorkerExecutionPacket", Value = malformedPacket }
+        });
+
+        attempt.Success.Should().BeFalse("worker packet without memory prohibition must be rejected");
+        attempt.Errors.Should().Contain(e => e.Contains("memory"));
+    }
+
+    // ==========================================
+    // MCP verification: all 3 stages return correct tool names
+    // ==========================================
+
+    [Fact]
+    public void SkillAndHarness_AllMcpStages_ReturnCorrectToolNamesAndPayloadRequest()
+    {
+        var r0 = StartSession("Design the migration");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+
+        // Stage 3: retrieve
+        var r3 = SubmitChunkQualityReport(r0.SessionId);
+        r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
+        r3.ToolName.Should().Be("retrieve_memory_by_chunks",
+            "harness must return exact tool name for retrieve stage");
+        r3.Payload.Should().ContainKey("request",
+            "harness must provide payload.request for agent to pass directly to MCP tool");
+
+        // Stage 4: merge
+        var r4 = SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
+        r4.ToolName.Should().Be("merge_retrieval_results",
+            "harness must return exact tool name for merge stage");
+        r4.Payload.Should().ContainKey("request",
+            "harness must provide payload.request for merge tool");
+
+        // Stage 5: context pack
+        var r5 = SubmitMergeRetrievalResultsResponse(r0.SessionId);
+        r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
+        r5.ToolName.Should().Be("build_memory_context_pack",
+            "harness must return exact tool name for context pack stage");
+        r5.Payload.Should().ContainKey("request",
+            "harness must provide payload.request for context pack tool");
+    }
+
+    [Fact]
+    public void SkillAndHarness_MalformedMergeResponse_HardStops()
+    {
+        var r0 = StartSession("Add feature");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        SubmitChunkQualityReport(r0.SessionId);
+        var r4 = SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
+
+        // Submit invalid merge response (missing 'merged' field)
+        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""items"": []
+        }");
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentCallMcpMergeRetrievalResults,
+            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = wrongShape }
+        });
+
+        attempt.Success.Should().BeFalse("malformed merge response must hard-stop");
+        attempt.Stage.Should().Be("error");
+        attempt.Errors.Should().Contain(e => e.Contains("merged"));
+    }
+
+    [Fact]
+    public void SkillAndHarness_MalformedContextPackResponse_HardStops()
+    {
+        var r0 = StartSession("Add feature");
+        SubmitRequirementIntent(r0.SessionId);
+        SubmitRetrievalChunkSet(r0.SessionId);
+        SubmitChunkQualityReport(r0.SessionId);
+        SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        var r5 = SubmitMergeRetrievalResultsResponse(r0.SessionId);
+        r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
+
+        // Submit invalid context pack response (missing 'memory_context_pack' field)
+        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""context"": {}
+        }");
+
+        var attempt = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
+        {
+            SessionId = r0.SessionId,
+            CompletedAction = HarnessActionName.AgentCallMcpBuildMemoryContextPack,
+            Artifact = new Artifact { ArtifactType = "BuildMemoryContextPackResponse", Value = wrongShape }
+        });
+
+        attempt.Success.Should().BeFalse("malformed context pack response must hard-stop");
+        attempt.Stage.Should().Be("error");
+        attempt.Errors.Should().Contain(e => e.Contains("memory_context_pack"));
     }
 
     public void Dispose()

@@ -25,5 +25,11 @@ if (-not (Test-Path $csprojPath)) {
 Write-Output "Publishing NativeAOT: $csprojPath"
 dotnet publish $csprojPath -c Release -r $RuntimeIdentifier --self-contained true -o $outputRoot /p:PublishAot=true
 
+# Delete all *.pdb files after build
+Get-ChildItem -Path $outputRoot -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-Item -Path $_.FullName -Force
+}
+Write-Output "Deleted *.pdb files."
+
 Write-Output "Done. AOT artifacts at: $outputRoot"
 

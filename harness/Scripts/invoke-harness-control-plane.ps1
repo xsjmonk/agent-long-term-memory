@@ -1,10 +1,36 @@
 # invoke-harness-control-plane.ps1
-# Wrapper script for Harness Control Plane protocol
-# This is the ONLY supported harness entrypoint
-# Usage: invoke-harness-control-plane.ps1 -Command <command> [options]
+# The ONLY supported entrypoint for the Harness Control-Plane protocol.
+#
+# COMMANDS
+#   start-session
+#       --raw-task <string>        Raw task description (required)
+#       --project  <string>        Project name (optional)
+#
+#   submit-step-result
+#       --session-id    <string>   Session identifier returned by start-session (required)
+#       --action        <string>   Completed action name, e.g. agent_generate_requirement_intent (required)
+#       --artifact-type <string>   Artifact type, e.g. RequirementIntent (required)
+#       --artifact-file <string>   Path to JSON file containing the artifact (required)
+#
+#   get-next-step
+#       --session-id    <string>   Session identifier (required)
+#
+#   get-session-status
+#       --session-id    <string>   Session identifier (required)
+#
+#   cancel-session
+#       --session-id    <string>   Session identifier (required)
+#
+# EXIT CODES
+#   0   success
+#   1   error (see stderr and/or JSON response for details)
+#
+# ENVIRONMENT
+#   HARNESS_EXE_PATH   Override the control-plane executable path.
 
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateSet("start-session", "submit-step-result", "get-next-step", "get-session-status", "cancel-session")]
     [string]$Command,
 
     [string]$SessionId,
@@ -15,49 +41,103 @@ param(
     [string]$Project
 )
 
-$scriptDir = Split-Path $PSScriptRoot -Parent
+$repoRoot = Split-Path $PSScriptRoot -Parent
+
+# --- Locate the control-plane executable ---
 
 $exePath = $null
+
 if ($env:HARNESS_EXE_PATH) {
     $exePath = $env:HARNESS_EXE_PATH
     if (!(Test-Path $exePath)) {
-        Write-Error "HARNESS_EXE_PATH set but executable not found: $exePath"
+        Write-Error "HARNESS_EXE_PATH is set but the executable was not found: $exePath"
         exit 1
     }
 }
 else {
-    # Search order: Release/net10.0, then Debug/net10.0
     $searchPaths = @(
-        "$scriptDir\src\HarnessMcp.ControlPlane\bin\Release\net10.0\HarnessMcp.ControlPlane.exe",
-        "$scriptDir\src\HarnessMcp.ControlPlane\bin\Release\net10.0\HarnessMcp.ControlPlane",
-        "$scriptDir\src\HarnessMcp.ControlPlane\bin\Debug\net10.0\HarnessMcp.ControlPlane.exe",
-        "$scriptDir\src\HarnessMcp.ControlPlane\bin\Debug\net10.0\HarnessMcp.ControlPlane"
+        "$repoRoot\src\HarnessMcp.ControlPlane\bin\Release\net8.0\HarnessMcp.ControlPlane.exe",
+        "$repoRoot\src\HarnessMcp.ControlPlane\bin\Release\net8.0\HarnessMcp.ControlPlane",
+        "$repoRoot\src\HarnessMcp.ControlPlane\bin\Debug\net8.0\HarnessMcp.ControlPlane.exe",
+        "$repoRoot\src\HarnessMcp.ControlPlane\bin\Debug\net8.0\HarnessMcp.ControlPlane"
     )
-    foreach ($path in $searchPaths) {
-        if ((Test-Path $path) -or (Test-Path "$path.exe")) {
-            $exePath = $path
-            if (Test-Path "$path.exe") { $exePath = "$path.exe" }
+    foreach ($candidate in $searchPaths) {
+        if (Test-Path $candidate) {
+            $exePath = $candidate
             break
         }
     }
 }
 
 if (-not $exePath) {
-    Write-Error "ControlPlane executable not found. Set `$env:HARNESS_EXE_PATH or build the project first."
-    Write-Host "Build with: dotnet build src/HarnessMcp.ControlPlane"
+    Write-Error @"
+ControlPlane executable not found.
+
+To build:
+    dotnet build src\HarnessMcp.ControlPlane
+
+Or set the HARNESS_EXE_PATH environment variable to the full path of the executable.
+"@
     exit 1
 }
 
-$args = @($Command)
+# --- Validate required arguments per command ---
 
-if ($SessionId) { $args += "--session-id"; $args += $SessionId }
-if ($RawTask) { $args += "--raw-task"; $args += $RawTask }
-if ($Action) { $args += "--action"; $args += $Action }
-if ($ArtifactType) { $args += "--artifact-type"; $args += $ArtifactType }
-if ($ArtifactFile) { $args += "--artifact-file"; $args += $ArtifactFile }
-if ($Project) { $args += "--project"; $args += $Project }
+switch ($Command) {
+    "start-session" {
+        if (-not $RawTask) {
+            Write-Error "start-session requires --raw-task <string>"
+            exit 1
+        }
+    }
+    "submit-step-result" {
+        $missing = @()
+        if (-not $SessionId)    { $missing += "--session-id" }
+        if (-not $Action)       { $missing += "--action" }
+        if (-not $ArtifactType) { $missing += "--artifact-type" }
+        if (-not $ArtifactFile) { $missing += "--artifact-file" }
+        if ($missing.Count -gt 0) {
+            Write-Error "submit-step-result requires: $($missing -join ', ')"
+            exit 1
+        }
+        if (!(Test-Path $ArtifactFile)) {
+            Write-Error "Artifact file not found: $ArtifactFile"
+            exit 1
+        }
+    }
+    "get-next-step" {
+        if (-not $SessionId) {
+            Write-Error "get-next-step requires --session-id <string>"
+            exit 1
+        }
+    }
+    "get-session-status" {
+        if (-not $SessionId) {
+            Write-Error "get-session-status requires --session-id <string>"
+            exit 1
+        }
+    }
+    "cancel-session" {
+        if (-not $SessionId) {
+            Write-Error "cancel-session requires --session-id <string>"
+            exit 1
+        }
+    }
+}
 
-& $exePath @args
-$exitCode = $LASTEXITCODE
+# --- Build argument list ---
 
-exit $exitCode
+$cmdArgs = [System.Collections.Generic.List[string]]::new()
+$cmdArgs.Add($Command)
+
+if ($SessionId)    { $cmdArgs.Add("--session-id");    $cmdArgs.Add($SessionId) }
+if ($RawTask)      { $cmdArgs.Add("--raw-task");      $cmdArgs.Add($RawTask) }
+if ($Action)       { $cmdArgs.Add("--action");        $cmdArgs.Add($Action) }
+if ($ArtifactType) { $cmdArgs.Add("--artifact-type"); $cmdArgs.Add($ArtifactType) }
+if ($ArtifactFile) { $cmdArgs.Add("--artifact-file"); $cmdArgs.Add($ArtifactFile) }
+if ($Project)      { $cmdArgs.Add("--project");       $cmdArgs.Add($Project) }
+
+# --- Invoke ---
+
+& $exePath @cmdArgs
+exit $LASTEXITCODE

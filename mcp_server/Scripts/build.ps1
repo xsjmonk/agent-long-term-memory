@@ -30,4 +30,10 @@ New-Item -ItemType Directory -Path $projectOut -Force | Out-Null
 Write-Output "Publishing (Native AOT): HarnessMcp.Host.Aot -> $projectOut"
 dotnet publish $csprojPath -c Release -r $RuntimeIdentifier --self-contained true --output $projectOut
 
+# Delete all *.pdb files after build
+Get-ChildItem -Path $projectOut -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-Item -Path $_.FullName -Force
+}
+Write-Output "Deleted *.pdb files."
+
 Write-Output "Done. Artifacts at: $projectOut"

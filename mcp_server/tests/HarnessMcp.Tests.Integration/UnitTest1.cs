@@ -581,6 +581,16 @@ public sealed class UnitTest1
                 var candidate = Path.Combine(dir.FullName, targetFile);
                 if (File.Exists(candidate))
                     return dir.FullName;
+
+                // Some repos store design docs under a sibling `docs/` folder.
+                // Example: <repoRoot>/docs/mcp_server_design.md
+                var parent = dir.Parent?.FullName;
+                if (!string.IsNullOrWhiteSpace(parent))
+                {
+                    var siblingDocsCandidate = Path.Combine(parent, "docs", targetFile);
+                    if (File.Exists(siblingDocsCandidate))
+                        return Path.Combine(parent, "docs");
+                }
                 dir = dir.Parent;
             }
             throw new InvalidOperationException($"Unable to find {targetFile} upwards from {startDir}.");

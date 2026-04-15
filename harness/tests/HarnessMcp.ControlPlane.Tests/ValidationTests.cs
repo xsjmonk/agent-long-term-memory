@@ -292,7 +292,25 @@ public class ValidationTests : IDisposable
 
     private void _SubmitMcpRetrieve(string sessionId)
     {
-        var retrieveJson = JsonSerializer.Deserialize<JsonElement>(@"{ ""chunk_results"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""results"": {} }] }");
+        var retrieveJson = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""chunk_results"": [
+                {
+                    ""chunk_id"": ""c1"",
+                    ""chunk_type"": ""core_task"",
+                    ""results"": {
+                        ""decisions"": [],
+                        ""best_practices"": [{ ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }],
+                        ""anti_patterns"": [],
+                        ""similar_cases"": [],
+                        ""constraints"": [],
+                        ""references"": [],
+                        ""structures"": []
+                    }
+                }
+            ]
+        }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -303,7 +321,19 @@ public class ValidationTests : IDisposable
 
     private void _SubmitMerge(string sessionId)
     {
-        var mergeJson = JsonSerializer.Deserialize<JsonElement>(@"{ ""decisions"": [] }");
+        var mergeJson = JsonSerializer.Deserialize<JsonElement>(@"
+        {
+            ""task_id"": ""task-1"",
+            ""merged"": {
+                ""decisions"": [],
+                ""constraints"": [],
+                ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant""] }],
+                ""anti_patterns"": [],
+                ""similar_cases"": [],
+                ""references"": [],
+                ""structures"": []
+            }
+        }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,

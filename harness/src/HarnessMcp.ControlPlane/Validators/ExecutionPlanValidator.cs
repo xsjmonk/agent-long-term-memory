@@ -35,8 +35,8 @@ public class ExecutionPlanValidator
         if (!element.TryGetProperty("deliverables", out var deliverables) || deliverables.ValueKind != JsonValueKind.Array || deliverables.GetArrayLength() == 0)
             errors.Add("deliverables array is required and must not be empty");
 
-        if (!element.TryGetProperty("forbidden_actions", out var forbiddenActions) || forbiddenActions.ValueKind != JsonValueKind.Array)
-            errors.Add("forbidden_actions array is required");
+        if (!element.TryGetProperty("forbidden_actions", out var forbiddenActions) || forbiddenActions.ValueKind != JsonValueKind.Array || forbiddenActions.GetArrayLength() == 0)
+            errors.Add("forbidden_actions array is required and must not be empty");
 
         if (!element.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
         {
@@ -54,7 +54,7 @@ public class ExecutionPlanValidator
         if (steps.Count > _options.MaxPlanSteps)
             warnings.Add($"step count {steps.Count} exceeds recommended max {_options.MaxPlanSteps}");
 
-        // Constraints: required if RequirementIntent had hard_constraints
+        // Constraints: at least one constraint is always required
         var hardConstraints = new List<string>();
 
         if (requirementIntent is JsonElement riElement && riElement.TryGetProperty("hard_constraints", out var hcElement))
@@ -67,25 +67,22 @@ public class ExecutionPlanValidator
             }
         }
 
-        if (hardConstraints.Count > 0)
+        if (!element.TryGetProperty("constraints", out var planConstraints) || planConstraints.ValueKind != JsonValueKind.Array || planConstraints.GetArrayLength() == 0)
         {
-            if (!element.TryGetProperty("constraints", out var planConstraints) || planConstraints.ValueKind != JsonValueKind.Array || planConstraints.GetArrayLength() == 0)
-            {
-                errors.Add("plan must include top-level constraints when RequirementIntent.hard_constraints is non-empty");
-            }
-            else
-            {
-                var planConstraintStrings = planConstraints.EnumerateArray()
-                    .Select(c => c.GetString()?.ToLowerInvariant())
-                    .Where(s => !string.IsNullOrEmpty(s))
-                    .ToList();
+            errors.Add("constraints array is required and must not be empty");
+        }
+        else if (hardConstraints.Count > 0)
+        {
+            var planConstraintStrings = planConstraints.EnumerateArray()
+                .Select(c => c.GetString()?.ToLowerInvariant())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToList();
 
-                foreach (var hc in hardConstraints)
+            foreach (var hc in hardConstraints)
+            {
+                if (!planConstraintStrings.Any(pc => pc == hc || pc!.Contains(hc) || hc.Contains(pc!)))
                 {
-                    if (!planConstraintStrings.Any(pc => pc == hc || pc!.Contains(hc) || hc.Contains(pc!)))
-                    {
-                        errors.Add($"hard constraint '{hc}' must be preserved in plan constraints");
-                    }
+                    errors.Add($"hard constraint '{hc}' must be preserved in plan constraints");
                 }
             }
         }

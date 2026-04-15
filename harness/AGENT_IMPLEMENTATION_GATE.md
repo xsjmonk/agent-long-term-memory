@@ -1,60 +1,126 @@
 # Agent Implementation Gate
 
-This file tells the coding agent that the harness implementation is NOT complete until specific tests pass.
+**You may NOT claim this implementation is complete until every test passes.**
 
-## Architecture Overview
+This is a hard gate. Passing tests are the only acceptable evidence of a correct implementation.
+Weakening or deleting tests to make them pass is FORBIDDEN.
 
-This repository implements the **Harness Control-Plane-Only Design**:
-- The **agent** (you) does the actual work
-- The **skills** (in `.cursor/rules/`) define the semantic flow
-- The **harness** (`HarnessMcp.ControlPlane`) is control-plane only
-- The harness does NOT call LLM APIs or MCP itself
-- The harness provides a single strict entrypoint and deterministic protocol
+---
 
-## Implementation Status
+## Required Test Command
 
-### Required Tests
+Run all tests from the repository root:
 
-All tests under `tests/HarnessMcp.ControlPlane.Tests/` MUST pass:
-- Protocol validation tests
-- Validator tests
-- Skill + harness flow tests
-- Wrapper script tests
+```
+dotnet test tests/HarnessMcp.ControlPlane.Tests/HarnessMcp.ControlPlane.Tests.csproj
+```
 
-### The Implementation is NOT Complete Until:
+All tests must pass with exit code 0. Any failure blocks completion.
 
-1. All tests in `tests/HarnessMcp.ControlPlane.Tests/` pass
-2. The skills contain concrete operational instructions
-3. Validators reject non-canonical artifacts
-4. No path exists to `HarnessMcp.AgentClient`
-5. Wrapper resolves only to `HarnessMcp.ControlPlane`
+---
 
-### Do NOT Bypass Tests
+## What the Tests Verify
 
-DO NOT weaken validators to make tests pass.
-DO NOT skip test execution.
-DO NOT modify tests to accommodate broken implementation.
-The tests define the contract - implementation must satisfy them.
+### Skill File Existence and Canonical Naming (`RuleContentTests`)
 
-## What This Means For You
+- All five canonical `.cursor/rules/*.mdc` files exist with exact canonical names
+- No stale/legacy file names exist
+- Planning skill contains `ALWAYS`, `MUST`, `FORBIDDEN` imperatives, stage table, do-not-skip section, resume section, completion presentation section
+- Failure skill contains `HARD STOP`, 3 failure type distinctions, hard-stop checklist, repair-by-guessing prohibition
+- MCP skill contains generic-agent note, negative examples with `INVALID` markers, `RAW` response rule, `payload.request` requirement
+- Execution skill contains `Handoff Contract`, `DO NOT Retrieve`, `forbidden by design`
+- Activation skill contains generic agent wording, decision heuristic, activation decision table, bias-toward-activation rule
 
-When implementing tasks in this repository:
+### Canonical Contract Rejection (`CanonicalContractRejectionTests`)
 
-1. You MUST use `Scripts\invoke-harness-control-plane.ps1` as the harness entrypoint
-2. You MUST follow the stage order defined in the harness protocol
-3. You MUST NOT call MCP before harness instructs at that stage
-4. You MUST NOT generate execution plan before harness reaches that stage
-5. You MUST stop immediately on harness error and fix only the indicated artifact
-6. The skills in `.cursor/rules/` are part of production behavior
+- `RequirementIntent`: rejects missing `task_id`, `task_type`, `goal`, `complexity`, `hard_constraints`, `risk_signals`; rejects legacy alias `objective`
+- `RetrievalChunkSet`: rejects missing `task_id`, `chunks`, invalid chunk types, missing `core_task`, missing `constraint` chunk when `hard_constraints` non-empty, missing `risk` chunk when `risk_signals` non-empty
+- MCP responses: rejects invalid `retrieve_memory_by_chunks` (missing `chunk_results`), invalid `merge_retrieval_results` (missing `merged`), invalid `build_memory_context_pack` (missing `memory_context_pack`)
+- `ExecutionPlan`: rejects missing `task_id`, `task`, `scope`, `steps`, `deliverables`; rejects empty `constraints`; rejects empty `forbidden_actions`; rejects legacy alias `objective`
+- `WorkerExecutionPacket`: rejects missing `goal`, `scope`, `hard_constraints`, `forbidden_actions`, `steps`, `required_output_sections`; rejects packet without memory prohibition in `execution_rules`
 
-## Final Verification Checklist
+### Generic Agent Activation Skill (`GenericAgentSkillActivationTests`)
 
-Before accepting implementation as complete:
+- File exists at exact canonical name
+- Contains generic agent wording
+- Contains semantic planning intent language; explicitly rejects lexical-only activation
+- Contains positive activation examples (`migration`, `approach`, `design`)
+- Contains non-activation examples (`trivial`, `casual`), with `do NOT activate` wording
+- Contains bias-toward-activation rule and decision heuristic
+- Distinguishes planning mode from execution mode
+- Links to `00-harness-control-plane.mdc` and `02-harness-execution.mdc`
+- Contains activation decision table; explicitly handles `uncertain` and `non-trivial` cases
 
-- [ ] No active path references `HarnessMcp.AgentClient`
-- [ ] Wrapper points only to `HarnessMcp.ControlPlane`
-- [ ] Skills are detailed enough for real-life use
-- [ ] Harness returns strict canonical MCP-stage contracts with `toolName` and `payload.request`
-- [ ] Validators reject non-canonical artifacts
-- [ ] Tests prove both protocol progression AND skills + harness together enforce the flow
-- [ ] All tests pass
+### Skill Operational Strength (`SkillOperationalStrengthTests`)
+
+Verifies that skill files are production-grade operational runbooks, not loose guidance:
+
+- Planning skill: `ALWAYS`, `NEVER`, `MUST`, `FORBIDDEN`; stage table with markdown `|` format; resume section with `get-next-step` and `get-session-status`; completion presentation; do-not-skip; planning+implementation-in-same-message scenario
+- Failure skill: `HARD STOP`; repair-by-guessing prohibition; all 3 failure type names; `STOP IMMEDIATELY`; free-form planning prohibition
+- MCP skill: generic-agent note section header; exact tool mapping with `EXACTLY`; `RAW` response rule; `payload.request`; negative examples with `INVALID`; Claude and Cursor mentioned
+- Execution skill: `Handoff Contract`; `DO NOT Retrieve`; `forbidden by design`; `do not replan`; report assumptions and unresolved issues; `per_step_results`, `final_deliverables`, `validation_summary`
+- Activation skill: generic agent; semantic/planning intent; decision heuristic; activation decision table; lexical + insufficient
+
+### Skills + Harness Integration (`SkillAndHarnessFlowTests`)
+
+- Full happy path: all 9 stages complete in order; final stage returns `complete` with `CompletionArtifacts`
+- Wrong action at stage 1 (requirement intent), stage 2 (chunk set), stage 3 (validation), and MCP stages all hard-stop
+- Malformed MCP responses (missing `chunk_results`, `merged`, `memory_context_pack`) hard-stop with field-specific error messages
+- Malformed `ExecutionPlan` (empty `constraints`, empty `forbidden_actions`) hard-stops
+- Malformed `WorkerExecutionPacket` (no memory prohibition in `execution_rules`) hard-stops
+- All 3 MCP stages return correct `toolName` and `payload.request`
+- Out-of-order stage attempts hard-stop; skipping to `complete` hard-stops
+
+---
+
+## Architecture Reminder
+
+This repository implements a **Control-Plane-Only Harness**:
+
+- The **harness** (`HarnessMcp.ControlPlane`) controls stage sequencing, validates artifacts, and returns the next action
+- The **harness does NOT** call LLM APIs, call MCP tools, do planning, or execute agent work
+- The **agent** performs all work; the harness tells the agent what to do next
+- The **skills** (`.cursor/rules/*.mdc`) define the semantic flow for any planning-capable agent
+
+---
+
+## Forbidden Actions for Agents Evaluating This Gate
+
+- **Do NOT weaken any test** (removing `.Contain()` assertions, changing `BeFalse` to `BeTrue`, etc.)
+- **Do NOT delete any test**
+- **Do NOT skip tests** with `[Skip]` or by commenting out `[Fact]`
+- **Do NOT claim success while any test is red**
+- **Do NOT report test results you did not actually run**
+- **Do NOT add `HarnessMcp.AgentClient` or any LLM API / MCP client code to the harness**
+
+If tests fail, fix the **implementation** (skills, validators, harness code), not the tests.
+
+---
+
+## Implementation Checklist
+
+Before running tests, verify:
+
+- [ ] All 5 `.cursor/rules/*.mdc` files exist with canonical names (00 through 04)
+- [ ] No stale `.cursor/rules/*.mdc` files with legacy names exist
+- [ ] `ExecutionPlanValidator` requires non-empty `constraints` (always) and non-empty `forbidden_actions`
+- [ ] `WorkerExecutionPacketValidator` requires memory prohibition in `execution_rules`
+- [ ] All canonical artifact validators reject legacy aliases (e.g., `objective` instead of `task`/`task_id`)
+- [ ] `Scripts\invoke-harness-control-plane.ps1` uses `$cmdArgs` (not `$args`) and validates required arguments per command
+- [ ] `build.ps1` targets only `src\HarnessMcp.ControlPlane\HarnessMcp.ControlPlane.csproj`
+
+---
+
+## Test Run Summary Template
+
+When reporting completion, include:
+
+```
+Test command:  dotnet test tests/HarnessMcp.ControlPlane.Tests/HarnessMcp.ControlPlane.Tests.csproj
+Total tests:   [N]
+Passed:        [N]
+Failed:        0
+Exit code:     0
+```
+
+Any deviation from `Failed: 0` means the gate has not been cleared.

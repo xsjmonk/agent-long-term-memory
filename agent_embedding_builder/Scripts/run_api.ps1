@@ -106,9 +106,6 @@ import json
 result = {
   "fastapi": {"installed": False, "error": None},
   "uvicorn": {"installed": False, "error": None},
-  "torch": {"installed": False, "error": None},
-  "sentence_transformers": {"installed": False, "error": None},
-  "sklearn": {"installed": False, "error": None},
 }
 
 try:
@@ -122,24 +119,6 @@ try:
   result["uvicorn"]["installed"] = True
 except Exception as exc:
   result["uvicorn"]["error"] = str(exc)
-
-try:
-  import torch  # noqa: F401
-  result["torch"]["installed"] = True
-except Exception as exc:
-  result["torch"]["error"] = str(exc)
-
-try:
-  import sentence_transformers  # noqa: F401
-  result["sentence_transformers"]["installed"] = True
-except Exception as exc:
-  result["sentence_transformers"]["error"] = str(exc)
-
-try:
-  import sklearn  # noqa: F401
-  result["sklearn"]["installed"] = True
-except Exception as exc:
-  result["sklearn"]["error"] = str(exc)
 
 print(json.dumps(result))
 '@
@@ -171,15 +150,6 @@ print(json.dumps(result))
     }
     if (-not [bool]$payload.uvicorn.installed) {
         throw "Active Conda environment is missing required package uvicorn. Recreate/update the Conda environment from environment.yml."
-    }
-    if (-not [bool]$payload.torch.installed) {
-        throw "Active Conda environment is missing required package torch. Recreate/update the Conda environment from environment.yml."
-    }
-    if (-not [bool]$payload.sentence_transformers.installed) {
-        throw "Active Conda environment is missing required package sentence-transformers. Recreate/update the Conda environment from environment.yml."
-    }
-    if (-not [bool]$payload.sklearn.installed) {
-        throw "Active Conda environment is missing required package scikit-learn. Recreate/update the Conda environment from environment.yml."
     }
 }
 

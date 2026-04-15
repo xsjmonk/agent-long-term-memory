@@ -147,9 +147,11 @@ public sealed class EmbeddingSemanticPathTests
             ModelName: "builder-model",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask");
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs");
 
         var search = new KnowledgeSearchService(
             validator: new NoOpValidator(),

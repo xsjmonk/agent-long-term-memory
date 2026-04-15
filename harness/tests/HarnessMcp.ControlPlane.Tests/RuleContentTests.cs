@@ -225,6 +225,212 @@ public class RuleContentTests
         content.Should().NotContain("if the user says the word 'plan'");
     }
 
+    // ==========================================
+    // Stronger Planning Skill (00) Tests
+    // ==========================================
+
+    [Fact]
+    public void PlanningRule_ContainsAlwaysMustForbiddenImperatives()
+    {
+        var content = ReadRuleOrFail("00-harness-control-plane.mdc");
+        content.Should().Contain("ALWAYS",
+            "planning rule must contain ALWAYS imperatives — soft guidance is insufficient");
+        content.Should().Contain("MUST",
+            "planning rule must contain MUST requirements");
+        content.Should().Contain("FORBIDDEN",
+            "planning rule must contain FORBIDDEN prohibitions");
+    }
+
+    [Fact]
+    public void PlanningRule_ContainsDoNotSkipSection()
+    {
+        var content = ReadRuleOrFail("00-harness-control-plane.mdc");
+        content.ToLowerInvariant().Should().Contain("do-not-skip",
+            "planning rule must contain a do-not-skip/do-not-batch/do-not-bypass section");
+    }
+
+    [Fact]
+    public void PlanningRule_ContainsResumeSection()
+    {
+        var content = ReadRuleOrFail("00-harness-control-plane.mdc");
+        content.ToLowerInvariant().Should().Contain("how to resume",
+            "planning rule must contain a 'how to resume' section");
+        content.Should().Contain("get-next-step",
+            "resume section must reference get-next-step command");
+        content.Should().Contain("get-session-status",
+            "resume section must reference get-session-status command");
+    }
+
+    [Fact]
+    public void PlanningRule_ContainsCompletionPresentationSection()
+    {
+        var content = ReadRuleOrFail("00-harness-control-plane.mdc");
+        content.ToLowerInvariant().Should().Contain("what to present",
+            "planning rule must include a 'what to present at completion' section");
+    }
+
+    // ==========================================
+    // Stronger Failure Skill (01) Tests
+    // ==========================================
+
+    [Fact]
+    public void FailureRule_ContainsHardStop()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.Should().Contain("HARD STOP",
+            "failure rule must contain 'HARD STOP' language — soft guidance is insufficient");
+    }
+
+    [Fact]
+    public void FailureRule_DistinguishesThreeFailureTypes()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.Should().Contain("Harness Validation Failure",
+            "failure rule must distinguish Harness Validation Failure");
+        content.Should().Contain("MCP Tool Call Failure",
+            "failure rule must distinguish MCP Tool Call Failure");
+        content.Should().Contain("Wrapper",
+            "failure rule must distinguish Wrapper/Executable Invocation Failure");
+    }
+
+    [Fact]
+    public void FailureRule_ContainsRepairByGuessingProhibition()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.ToLowerInvariant().Should().Contain("repair by guessing",
+            "failure rule must explicitly prohibit 'repair by guessing'");
+    }
+
+    [Fact]
+    public void FailureRule_DistinguishesFourFailureTypes()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.Should().Contain("Harness Validation Failure",
+            "failure rule must distinguish Harness Validation Failure (type 1)");
+        content.Should().Contain("MCP Tool Call Failure",
+            "failure rule must distinguish MCP Tool Call Failure (type 2)");
+        content.Should().Contain("Wrapper",
+            "failure rule must distinguish Wrapper/Executable Invocation Failure (type 3)");
+        content.ToLowerInvariant().Should().Contain("mismatch",
+            "failure rule must distinguish Session Resume/State Mismatch Failure (type 4)");
+    }
+
+    [Fact]
+    public void FailureRule_ContainsSessionMismatchGuidance()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.ToLowerInvariant().Should().Contain("get-session-status",
+            "failure rule must reference get-session-status for mismatch recovery");
+    }
+
+    [Fact]
+    public void FailureRule_ContainsHardStopChecklist()
+    {
+        var content = ReadRuleOrFail("01-harness-failure.mdc");
+        content.ToLowerInvariant().Should().Contain("hard-stop checklist",
+            "failure rule must contain a hard-stop checklist");
+    }
+
+    // ==========================================
+    // Stronger MCP Skill (03) Tests
+    // ==========================================
+
+    [Fact]
+    public void McpToolRule_ContainsGenericAgentNote()
+    {
+        var content = ReadRuleOrFail("03-harness-mcp-tool-calling.mdc");
+        content.ToLowerInvariant().Should().Contain("generic agent",
+            "MCP skill must state it applies to generic agents");
+        content.ToLowerInvariant().Should().Contain("generic-agent note",
+            "MCP skill must have an explicit 'Generic-Agent Note' section header");
+    }
+
+    [Fact]
+    public void McpToolRule_ContainsNegativeExamples()
+    {
+        var content = ReadRuleOrFail("03-harness-mcp-tool-calling.mdc");
+        content.ToLowerInvariant().Should().Contain("negative examples",
+            "MCP skill must contain a 'Negative Examples' section showing invalid behaviors");
+        content.Should().Contain("INVALID",
+            "MCP skill negative examples must mark invalid behaviors with INVALID");
+    }
+
+    [Fact]
+    public void McpToolRule_ContainsRawResponseRule()
+    {
+        var content = ReadRuleOrFail("03-harness-mcp-tool-calling.mdc");
+        content.Should().Contain("RAW",
+            "MCP skill must require submitting the RAW MCP response");
+        content.ToLowerInvariant().Should().Contain("payload.request",
+            "MCP skill must require using payload.request exactly");
+    }
+
+    [Fact]
+    public void McpToolRule_ContainsPositiveExamples()
+    {
+        var content = ReadRuleOrFail("03-harness-mcp-tool-calling.mdc");
+        content.ToLowerInvariant().Should().Contain("positive examples",
+            "MCP skill must have a 'Positive Examples' section showing correct valid behavior");
+        content.Should().Contain("CORRECT",
+            "MCP skill positive examples must mark valid behaviors with CORRECT");
+    }
+
+    // ==========================================
+    // Stronger Execution Skill (02) Tests
+    // ==========================================
+
+    [Fact]
+    public void ExecutionRule_ContainsHandoffContract()
+    {
+        var content = ReadRuleOrFail("02-harness-execution.mdc");
+        content.Should().Contain("Handoff Contract",
+            "execution rule must contain a 'Handoff Contract' section defining the planning-to-execution transition");
+    }
+
+    [Fact]
+    public void ExecutionRule_ContainsForbiddenByDesign()
+    {
+        var content = ReadRuleOrFail("02-harness-execution.mdc");
+        content.ToLowerInvariant().Should().Contain("forbidden by design",
+            "execution rule must say memory retrieval is 'forbidden by design'");
+    }
+
+    // ==========================================
+    // Stronger Activation Skill (04) Tests
+    // ==========================================
+
+    [Fact]
+    public void ActivationSkill_ContainsGenericAgentWording()
+    {
+        var content = ReadRuleOrFail("04-harness-skill-activation.mdc");
+        content.ToLowerInvariant().Should().Contain("generic agent",
+            "activation skill must state it applies to generic agents, not a specific product");
+    }
+
+    [Fact]
+    public void ActivationSkill_ContainsDecisionHeuristic()
+    {
+        var content = ReadRuleOrFail("04-harness-skill-activation.mdc");
+        content.ToLowerInvariant().Should().Contain("decision heuristic",
+            "activation skill must contain a 'decision heuristic' section for ambiguous cases");
+    }
+
+    [Fact]
+    public void ActivationSkill_ContainsActivationDecisionTable()
+    {
+        var content = ReadRuleOrFail("04-harness-skill-activation.mdc");
+        content.ToLowerInvariant().Should().Contain("activation decision table",
+            "activation skill must contain an activation decision table");
+    }
+
+    [Fact]
+    public void ActivationSkill_ContainsBiasTowardActivation()
+    {
+        var content = ReadRuleOrFail("04-harness-skill-activation.mdc");
+        content.ToLowerInvariant().Should().Contain("bias toward activation",
+            "activation skill must state to bias toward activation for ambiguous non-trivial tasks");
+    }
+
     // --- Private helpers ---
 
     private static string ReadRuleOrFail(string fileName)

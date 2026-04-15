@@ -1,12 +1,14 @@
 ---
-description: Harness MCP tool calling skill. Defines exact behavior when harness instructs the agent to call MCP tools during planning. Enforces exact tool names, exact request skeletons, and raw response submission.
+description: Harness MCP tool calling skill. Production-grade operational skill for generic agents. Defines exact behavior when harness instructs the agent to call MCP tools during planning stages. Enforces exact tool names, exact payload.request usage, and raw response submission.
 globs:
 alwaysApply: false
 ---
 
 # Harness MCP Tool Calling Skill
 
-This skill defines exact behavior when harness instructs the agent to call MCP tools during planning stages.
+## Generic-Agent Note
+
+This skill applies to **any generic agent** — Claude, Cursor, or any other planning-capable agent. It is not specific to any product. All agents using the harness planning loop MUST follow this skill when harness instructs MCP tool calls. The rules in this skill apply regardless of which AI system is executing the planning loop.
 
 ---
 
@@ -23,13 +25,15 @@ Do NOT call any other MCP tool. Do NOT call MCP at other times.
 
 ## Exact Tool Mapping — NO Substitutions
 
-Use EXACTLY this mapping. No substitutions. No alternatives.
+Use EXACTLY this mapping. No substitutions. No alternatives. No tool renaming.
 
 | Harness `nextAction` | MCP Tool to Call |
 |---|---|
 | `agent_call_mcp_retrieve_memory_by_chunks` | `retrieve_memory_by_chunks` |
 | `agent_call_mcp_merge_retrieval_results` | `merge_retrieval_results` |
 | `agent_call_mcp_build_memory_context_pack` | `build_memory_context_pack` |
+
+This mapping is the same whether the agent is Claude, Cursor, or any other planning-capable agent.
 
 **NEVER call:**
 - Any other MCP tool not listed above
@@ -57,15 +61,18 @@ From the harness response, read `toolName` at the top level:
 
 Confirm the tool name matches EXACTLY one of the three canonical tools in the table above.
 
-### Step 3: Use Request Skeleton EXACTLY
+### Step 3: Use `payload.request` EXACTLY
 
-Use `payload.request` from harness as the request. This contains:
-- `schemaVersion`
-- `requestId`
-- `taskId`
-- Stage-specific fields (`requirementIntent`, `retrievalChunks`, `retrieved`, `merged`, etc.)
+Use `payload.request` from harness as the MCP tool request body.
 
-DO NOT modify the structure. DO NOT add fields. DO NOT remove fields. Use it EXACTLY as provided.
+DO NOT modify the request in any way:
+- DO NOT add fields to `payload.request`
+- DO NOT remove fields from `payload.request`
+- DO NOT rename fields in `payload.request`
+- DO NOT restructure the request object
+- DO NOT substitute a different request format
+
+Use `payload.request` exactly as harness provides it.
 
 ### Step 4: Execute the MCP Call
 
@@ -75,10 +82,109 @@ Perform the actual MCP tool call with the exact request from `payload.request`.
 
 Call `submit-step-result` with the RAW MCP response:
 - Submit the FULL response as received from MCP
-- DO NOT modify the response to "help" validation
-- DO NOT remove fields
-- DO NOT add fields
-- DO NOT restructure or summarize
+- DO NOT modify the response to "help" harness validation
+- DO NOT remove fields from the response
+- DO NOT add fields to the response
+- DO NOT restructure or summarize the response
+- DO NOT filter out individual results
+
+---
+
+## Positive Examples — Valid Behavior
+
+The following are VALID behaviors. This is exactly what the agent MUST do:
+
+**VALID: Using the exact tool name from harness**
+```
+// harness says: nextAction: agent_call_mcp_retrieve_memory_by_chunks
+//               toolName: retrieve_memory_by_chunks
+// agent calls:  retrieve_memory_by_chunks(...)  ← CORRECT exact tool name
+```
+
+**VALID: Passing `payload.request` exactly as harness provided it**
+```json
+// harness provides:
+{
+  "nextAction": "agent_call_mcp_retrieve_memory_by_chunks",
+  "toolName": "retrieve_memory_by_chunks",
+  "payload": {
+    "request": { "schemaVersion": "1.0", "taskId": "t1", "retrievalChunks": [...] }
+  }
+}
+// agent calls: retrieve_memory_by_chunks({ "schemaVersion": "1.0", "taskId": "t1", "retrievalChunks": [...] })
+// ← CORRECT — payload.request passed unmodified as the MCP tool argument
+```
+
+**VALID: Submitting the raw MCP response back to harness without modification**
+```json
+// MCP tool returns:
+{
+  "task_id": "t1",
+  "chunk_results": [{ "chunk_id": "c1", "chunk_type": "core_task", "results": { ... } }]
+}
+// agent submits exactly this to harness via submit-step-result
+// ← CORRECT — full, unmodified raw response
+```
+
+**VALID: Calling all three tools in the correct sequence**
+```
+Stage 4: call retrieve_memory_by_chunks  → submit raw result to harness
+Stage 5: call merge_retrieval_results    → submit raw result to harness
+Stage 6: call build_memory_context_pack  → submit raw result to harness
+// ← CORRECT — one tool per stage, raw result submitted after each
+```
+
+---
+
+## Negative Examples — Invalid Behavior
+
+The following are concrete examples of INVALID behavior. NEVER do any of these:
+
+**INVALID: Using a substitute tool**
+```
+// harness says nextAction: agent_call_mcp_retrieve_memory_by_chunks
+// harness says toolName: retrieve_memory_by_chunks
+// agent calls: memory_search  ← INVALID — wrong tool name
+```
+
+**INVALID: Modifying the request before calling MCP**
+```json
+// harness provides payload.request:
+{ "taskId": "t1", "retrievalChunks": [...] }
+
+// agent adds extra field:
+{ "taskId": "t1", "retrievalChunks": [...], "extra_field": "value" }  // ← INVALID
+```
+
+**INVALID: Summarizing or restructuring the MCP response before submission**
+```json
+// MCP returns full response with all required buckets
+// agent submits a "simplified" version:
+{ "task_id": "t1", "chunk_results": [{ "chunk_id": "c1", "summary": "..." }] }
+// ← INVALID — modified response is not raw
+```
+
+**INVALID: Fabricating MCP results when MCP is unavailable**
+```json
+// MCP tool is not responding
+// agent invents a result:
+{ "task_id": "t1", "chunk_results": [] }
+// ← INVALID — fabricated result, not real MCP response
+```
+
+**INVALID: Calling MCP before harness instructs it**
+```
+// session is at stage: need_requirement_intent
+// agent calls retrieve_memory_by_chunks anyway
+// ← INVALID — MCP call not authorized by harness at this stage
+```
+
+**INVALID: Calling MCP after planning is complete**
+```
+// harness returned stage: complete
+// agent calls build_memory_context_pack for "extra context"
+// ← INVALID — MCP calls are only valid during planning stages
+```
 
 ---
 
@@ -95,6 +201,11 @@ Call `submit-step-result` with the RAW MCP response:
 - Do NOT merge multiple MCP calls into one stage
 - Do NOT merge stages
 
+### NEVER Alter the Request
+- Do NOT add fields to `payload.request`
+- Do NOT remove fields from `payload.request`
+- Use `payload.request` exactly as harness provides it
+
 ### NEVER Alter the Response
 - Do NOT remove fields to "simplify"
 - Do NOT add fields to "help validation"
@@ -108,32 +219,223 @@ Call `submit-step-result` with the RAW MCP response:
 
 ---
 
-## Request Skeleton Details
+## MCP Tool Parameter Reference
 
-### `retrieve_memory_by_chunks`
-Fields from `payload.request`:
-- `schemaVersion`: "1.0"
-- `requestId`: auto-generated unique ID
-- `taskId`: from session
-- `requirementIntent`: from session
-- `retrievalChunks`: from session
-- `search_profile`: `{ "active_only": true, "minimum_authority": "reviewed", "max_items_per_chunk": 5, "require_type_separation": true }`
+The harness builds `payload.request` for you — pass it directly without modification. This section documents every field so you understand what you are passing and can verify correctness.
 
-### `merge_retrieval_results`
-Fields from `payload.request`:
-- `schemaVersion`: "1.0"
-- `requestId`: auto-generated
-- `taskId`: from session
-- `retrieved`: MCP response from previous `retrieve_memory_by_chunks` stage
+---
 
-### `build_memory_context_pack`
-Fields from `payload.request`:
-- `schemaVersion`: "1.0"
-- `requestId`: auto-generated
-- `taskId`: from session
-- `requirementIntent`: from session
-- `retrieved`: MCP response from retrieve stage
-- `merged`: MCP response from merge stage
+### Tool 1: `retrieve_memory_by_chunks`
+
+Called at stage `need_mcp_retrieve_memory_by_chunks`.
+
+**How to call it:**
+```
+retrieve_memory_by_chunks(payload.request)
+```
+
+**Full parameter shape (`payload.request`):**
+
+```json
+{
+  "schemaVersion": "1.0",
+  "requestId": "<unique string — auto-generated by harness>",
+  "taskId": "<task ID from session>",
+  "requirementIntent": {
+    "taskType": "<string — e.g. 'ui-change', 'api-change', 'refactor'>",
+    "domain":   "<string — optional, domain scope>",
+    "module":   "<string — optional, module scope>",
+    "feature":  "<string — optional, feature scope>",
+    "hardConstraints": ["<string>", "..."],
+    "riskSignals":     ["<string>", "..."]
+  },
+  "retrievalChunks": [
+    {
+      "chunkId":   "<string — unique within this request>",
+      "chunkType": "<CoreTask | Constraint | Risk | Pattern | SimilarCase>",
+      "text":      "<string — optional, the retrieval query text for this chunk>",
+      "structuredScopes": {
+        "domains":  ["<string>"],
+        "modules":  ["<string>"],
+        "features": ["<string>"],
+        "layers":   ["<string>"],
+        "concerns": ["<string>"],
+        "repos":    ["<string>"],
+        "services": ["<string>"],
+        "symbols":  ["<string>"]
+      },
+      "taskShape": {
+        "taskType":          "<string>",
+        "featureShape":      "<string>",
+        "engineChangeAllowed": true,
+        "likelyLayers":      ["<string>"],
+        "riskSignals":       ["<string>"],
+        "complexity":        "<string — optional>"
+      }
+    }
+  ],
+  "searchProfile": {
+    "activeOnly":           true,
+    "minimumAuthority":     "<Draft | Observed | Reviewed | Approved | Canonical>",
+    "maxItemsPerChunk":     5,
+    "requireTypeSeparation": true
+  }
+}
+```
+
+**Field notes:**
+| Field | Required | Notes |
+|---|---|---|
+| `schemaVersion` | yes | Always `"1.0"` |
+| `requestId` | yes | Unique per call; harness auto-generates |
+| `taskId` | yes | From the session |
+| `requirementIntent.taskType` | yes | String describing the task category |
+| `requirementIntent.hardConstraints` | yes | May be empty array |
+| `requirementIntent.riskSignals` | yes | May be empty array |
+| `requirementIntent.domain/module/feature` | no | Scope filters; omit if unknown |
+| `retrievalChunks[].chunkId` | yes | Must be unique within the request |
+| `retrievalChunks[].chunkType` | yes | One of: `CoreTask`, `Constraint`, `Risk`, `Pattern`, `SimilarCase` |
+| `retrievalChunks[].text` | no | The free-text query for this chunk |
+| `retrievalChunks[].structuredScopes` | no | All sub-arrays may be empty |
+| `retrievalChunks[].taskShape` | no | Only for `SimilarCase` chunks |
+| `searchProfile.minimumAuthority` | yes | Harness defaults to `Reviewed` |
+
+---
+
+### Tool 2: `merge_retrieval_results`
+
+Called at stage `need_mcp_merge_retrieval_results`.
+
+**How to call it:**
+```
+merge_retrieval_results(payload.request)
+```
+
+**Full parameter shape (`payload.request`):**
+
+```json
+{
+  "schemaVersion": "1.0",
+  "requestId": "<unique string — auto-generated by harness>",
+  "taskId": "<task ID from session>",
+  "retrieved": { ... }
+}
+```
+
+**Field notes:**
+| Field | Required | Notes |
+|---|---|---|
+| `schemaVersion` | yes | Always `"1.0"` |
+| `requestId` | yes | Harness auto-generates |
+| `taskId` | yes | From the session |
+| `retrieved` | yes | The **complete, unmodified raw response** from `retrieve_memory_by_chunks`. Pass it exactly as received — do not extract or restructure. |
+
+The `retrieved` object has this shape (the full MCP response from stage 4):
+```json
+{
+  "schemaVersion": "1.0",
+  "kind": "retrieve_memory_by_chunks",
+  "requestId": "...",
+  "taskId": "...",
+  "chunkResults": [
+    {
+      "chunkId": "...",
+      "chunkType": "...",
+      "results": {
+        "decisions":     [...],
+        "bestPractices": [...],
+        "antipatterns":  [...],
+        "similarCases":  [...],
+        "constraints":   [...],
+        "references":    [...],
+        "structures":    [...]
+      },
+      "diagnostics": { ... }
+    }
+  ],
+  "notes": [...],
+  "elapsedMs": 0
+}
+```
+
+---
+
+### Tool 3: `build_memory_context_pack`
+
+Called at stage `need_mcp_build_memory_context_pack`.
+
+**How to call it:**
+```
+build_memory_context_pack(payload.request)
+```
+
+**Full parameter shape (`payload.request`):**
+
+```json
+{
+  "schemaVersion": "1.0",
+  "requestId": "<unique string — auto-generated by harness>",
+  "taskId": "<task ID from session>",
+  "requirementIntent": { ... },
+  "retrieved": { ... },
+  "merged":   { ... }
+}
+```
+
+**Field notes:**
+| Field | Required | Notes |
+|---|---|---|
+| `schemaVersion` | yes | Always `"1.0"` |
+| `requestId` | yes | Harness auto-generates |
+| `taskId` | yes | From the session |
+| `requirementIntent` | yes | Same `RequirementIntent` object from the session (same shape as in `retrieve_memory_by_chunks`) |
+| `retrieved` | yes | Complete raw response from `retrieve_memory_by_chunks` — do not modify |
+| `merged` | yes | Complete raw response from `merge_retrieval_results` — do not modify |
+
+The `merged` object has this shape (the full MCP response from stage 5):
+```json
+{
+  "schemaVersion": "1.0",
+  "kind": "merge_retrieval_results",
+  "requestId": "...",
+  "taskId": "...",
+  "decisions":     [...],
+  "constraints":   [...],
+  "bestPractices": [...],
+  "antiPatterns":  [...],
+  "similarCases":  [...],
+  "references":    [...],
+  "structures":    [...],
+  "warnings":      [...],
+  "elapsedMs":     0
+}
+```
+
+---
+
+### Shared: `chunkType` Enum Values
+
+Use exactly one of these strings for every `chunkType` field:
+
+| Value | Meaning |
+|---|---|
+| `CoreTask` | The core task description chunk |
+| `Constraint` | A hard constraint on the task |
+| `Risk` | A risk signal associated with the task |
+| `Pattern` | An architectural or design pattern hint |
+| `SimilarCase` | A prior similar task for case-based retrieval |
+
+### Shared: `minimumAuthority` Enum Values
+
+| Value | Meaning |
+|---|---|
+| `Draft` | Unreviewed |
+| `Observed` | Seen in practice |
+| `Reviewed` | Peer reviewed |
+| `Approved` | Formally approved |
+| `Canonical` | Authoritative source of truth |
+
+Default used by harness: `Reviewed`.
 
 ---
 
@@ -147,6 +449,6 @@ If MCP call itself fails (not harness validation):
 5. Do NOT switch to a non-MCP alternative
 
 If harness rejects the MCP response (validation failure):
-1. The response failed validation
+1. The response failed harness schema validation
 2. See `01-harness-failure.mdc` for recovery
 3. Do NOT modify the response to "fix" it — submit the raw response again after fixing only what harness identifies

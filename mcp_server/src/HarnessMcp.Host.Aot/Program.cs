@@ -79,7 +79,17 @@ static void RunHttp(string[] args, ComposedApplication composed, string configPa
     }
 
     if (realtime)
-        builder.Services.AddSignalR();
+    {
+        builder.Services
+            .AddSignalR()
+            .AddJsonProtocol(options =>
+            {
+                options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                options.PayloadSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+                options.PayloadSerializerOptions.TypeInfoResolverChain.Clear();
+                options.PayloadSerializerOptions.TypeInfoResolverChain.Add(SignalRJsonSerializerContext.Default);
+            });
+    }
 
     builder.Services.AddMcpServer()
         .WithHttpTransport(o =>
