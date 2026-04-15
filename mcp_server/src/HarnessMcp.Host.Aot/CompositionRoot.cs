@@ -11,19 +11,13 @@ public static class CompositionRoot
 {
     public static ComposedApplication Build(AppConfig config)
     {
-        // Allow easy endpoint configuration via the new `ServerApi` top-level node.
-        if (!string.IsNullOrWhiteSpace(config.ServerApi?.McpEndpoint))
-            config.Server.HttpListenUrl = config.ServerApi.McpEndpoint;
-
-        if (!string.IsNullOrWhiteSpace(config.ServerApi?.EmbeddingApi))
-            config.Embedding.Endpoint = config.ServerApi.EmbeddingApi;
-
         ValidateConfig(config);
 
         var ring = new MonitorRingBuffer(config.Monitoring.RingBufferSize);
         var broadcaster = new MonitorEventBroadcaster();
         var sink = new MonitorEventDispatcher(ring, broadcaster);
         var exporter = new MonitorEventExporter(ring);
+        var contextStore = new InMemorySearchRequestContextStore();
 
         var loggerFactory = LoggerFactory.Create(b =>
         {
@@ -40,7 +34,7 @@ public static class CompositionRoot
         IQueryEmbeddingService embedding = string.Equals(config.Embedding.QueryEmbeddingProvider, "NoOp", StringComparison.OrdinalIgnoreCase)
             ? new NoOpQueryEmbeddingService()
             : string.Equals(config.Embedding.QueryEmbeddingProvider, "LocalHttp", StringComparison.OrdinalIgnoreCase)
-                ? new LocalHttpQueryEmbeddingService(config.Embedding)
+                ? new LocalHttpQueryEmbeddingService(config.Embedding, null, contextStore)
                 : throw new InvalidOperationException($"Unknown Embedding.QueryEmbeddingProvider='{config.Embedding.QueryEmbeddingProvider}'");
 
         var embeddingInspector = new EmbeddingMetadataInspector(config, dataSource);
@@ -50,7 +44,7 @@ public static class CompositionRoot
         var authority = new AuthorityPolicy();
         var scopeNorm = new ScopeNormalizer();
         var planner = new ChunkQueryPlanner();
-        var ranking = new HybridRankingService(authority, caseShape);
+        var ranking = new HybridRankingService(authority, caseShape, contextStore);
         var assembler = new ContextPackAssembler();
         var cache = new InMemoryContextPackCache();
 
@@ -63,7 +57,7 @@ public static class CompositionRoot
             config.Embedding,
             embeddingInspector,
             embeddingCompatibility);
-        var chunk = new ChunkRetrievalService(validator, planner, search);
+        var chunk = new ChunkRetrievalService(validator, planner, search, contextStore);
         var merge = new RetrievalMergeService(validator);
         var pack = new MemoryContextPackService(validator, assembler, cache, config.Features);
         var read = new KnowledgeReadService(validator, repository);

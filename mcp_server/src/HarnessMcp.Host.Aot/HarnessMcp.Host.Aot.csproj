@@ -17,7 +17,6 @@
     <ProjectReference Include="..\HarnessMcp.Transport.Mcp\HarnessMcp.Transport.Mcp.csproj" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" />
     <PackageReference Include="ModelContextProtocol" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
 
   <ItemGroup>

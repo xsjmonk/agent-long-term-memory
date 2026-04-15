@@ -10,24 +10,8 @@ namespace HarnessMcp.Infrastructure.Postgres;
 /// </summary>
 public sealed class PostgresCaseShapeScoreProvider(NpgsqlDataSource dataSource, string schema) : ICaseShapeScoreProvider
 {
-    public double ComputeScore(SearchKnowledgeRequest request, Guid knowledgeItemId)
+    public double ComputeScore(Guid knowledgeItemId, SimilarCaseShapeDto? requestedShape)
     {
-        if (request.QueryKind != QueryKind.SimilarCase)
-            return 0d;
-
-        SimilarCaseShapeDto? requestedShape;
-        try
-        {
-            // For SimilarCase, Core serializes `chunk.TaskShape` into `QueryText`.
-            requestedShape = JsonSerializer.Deserialize(
-                request.QueryText,
-                AppJsonSerializerContext.Default.SimilarCaseShapeDto);
-        }
-        catch
-        {
-            return 0d;
-        }
-
         if (requestedShape is null)
             return 0d;
 
@@ -77,7 +61,7 @@ public sealed class PostgresCaseShapeScoreProvider(NpgsqlDataSource dataSource, 
 
         try
         {
-            return JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
+            return JsonSerializer.Deserialize(json, InfrastructureJsonSerializerContext.Default.StringArray) ?? Array.Empty<string>();
         }
         catch
         {

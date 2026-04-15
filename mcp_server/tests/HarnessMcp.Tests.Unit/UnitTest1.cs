@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -18,7 +18,7 @@ public sealed class UnitTest1
 {
     private sealed class ZeroCaseShapes : ICaseShapeScoreProvider
     {
-        public double ComputeScore(SearchKnowledgeRequest request, Guid knowledgeItemId) => 0;
+        public double ComputeScore(Guid knowledgeItemId, SimilarCaseShapeDto? requestedShape) => 0;
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class UnitTest1
     [Fact]
     public void HybridRankingService_RanksSemanticHigherWhenAuthorityMatches()
     {
-        var ranking = new HybridRankingService(new AuthorityPolicy(), new ZeroCaseShapes());
+        var ranking = new HybridRankingService(new AuthorityPolicy(), new ZeroCaseShapes(), null);
         var scopes = ScopeDtos.Empty;
         var a = Candidate(Guid.NewGuid(), RetrievalClass.Decision, semanticScore: 1.0, lexicalScore: 0.0, AuthorityLevel.Approved, KnowledgeStatus.Active, scopes);
         var b = Candidate(Guid.NewGuid(), RetrievalClass.Decision, semanticScore: 0.9, lexicalScore: 0.0, AuthorityLevel.Draft, KnowledgeStatus.Active, scopes);
@@ -148,7 +148,7 @@ public sealed class UnitTest1
 
     private sealed class FakeCaseShapeProvider(Dictionary<Guid, double> map) : ICaseShapeScoreProvider
     {
-        public double ComputeScore(SearchKnowledgeRequest request, Guid knowledgeItemId) =>
+        public double ComputeScore(Guid knowledgeItemId, SimilarCaseShapeDto? requestedShape) =>
             map.TryGetValue(knowledgeItemId, out var s) ? s : 0d;
     }
 
@@ -164,7 +164,10 @@ public sealed class UnitTest1
             [bId] = 0.1
         });
 
-        var ranking = new HybridRankingService(new AuthorityPolicy(), caseShapes);
+        var metadataStore = new InMemorySearchRequestContextStore();
+        metadataStore.Set("r", new SearchRequestContext(null, null, null, null, new SimilarCaseShapeDto("x", "y", false, null, null, null), null, "harness_retrieval"));
+
+        var ranking = new HybridRankingService(new AuthorityPolicy(), caseShapes, metadataStore);
 
         var scopes = ScopeDtos.Empty;
         var a = Candidate(aId, RetrievalClass.SimilarCase, semanticScore: 0.0, lexicalScore: 1.0, AuthorityLevel.Approved, KnowledgeStatus.Active, scopes);
@@ -173,7 +176,7 @@ public sealed class UnitTest1
         var request = new SearchKnowledgeRequest(
             SchemaVersion: "1.0",
             RequestId: "r",
-            QueryText: "{\"taskType\":\"x\",\"featureShape\":\"y\",\"engineChangeAllowed\":false,\"likelyLayers\":[],\"riskSignals\":[],\"complexity\":null}",
+            QueryText: "similar case text",
             QueryKind: QueryKind.SimilarCase,
             Scopes: scopes,
             RetrievalClasses: new[] { RetrievalClass.SimilarCase },
@@ -189,6 +192,154 @@ public sealed class UnitTest1
             request);
 
         Assert.Equal(aId, ranked[0].KnowledgeItemId);
+    }
+
+    [Fact]
+    public void ChunkQueryPlanner_SimilarCase_UsesChunkText_NotSerializedTaskShape()
+    {
+        var requirementIntent = new RequirementIntentDto(
+            TaskType: "ui-only",
+            Domain: null,
+            Module: null,
+            Feature: null,
+            HardConstraints: Array.Empty<string>(),
+            RiskSignals: Array.Empty<string>());
+
+        var searchProfile = new ChunkSearchProfileDto(
+            ActiveOnly: true,
+            MinimumAuthority: AuthorityLevel.Draft,
+            MaxItemsPerChunk: 5,
+            RequireTypeSeparation: false);
+
+        var request = new RetrieveMemoryByChunksRequest(
+            SchemaVersion: "1.0",
+            RequestId: "req",
+            TaskId: "task-1",
+            RequirementIntent: requirementIntent,
+            RetrievalChunks: new[]
+            {
+                new RetrievalChunkDto(
+                    ChunkId: "c1",
+                    ChunkType: ChunkType.SimilarCase,
+                    TaskShape: new SimilarCaseShapeDto(
+                        TaskType: "ui-only",
+                        FeatureShape: "card-refresh",
+                        EngineChangeAllowed: false,
+                        LikelyLayers: new[] { "ui" },
+                        RiskSignals: null,
+                        Complexity: null),
+                    Text: "ui-only card refresh with no engine change",
+                    StructuredScopes: ScopeDtos.Empty)
+            },
+            SearchProfile: searchProfile);
+
+        var planner = new ChunkQueryPlanner();
+        var searchReq = planner.BuildSearchRequest(request, request.RetrievalChunks[0], "c1");
+
+        Assert.Equal("ui-only card refresh with no engine change", searchReq.QueryText);
+        Assert.Equal(QueryKind.SimilarCase, searchReq.QueryKind);
+    }
+
+    [Fact]
+    public void LocalHttpQueryEmbeddingService_HarnessSimilarCase_UsesChunkTextAsText_AndTaskShapeAsMetadata()
+    {
+        var request = new SearchKnowledgeRequest(
+            SchemaVersion: "ignored",
+            RequestId: "req:suf",
+            QueryText: "ui-only card refresh with no engine change",
+            QueryKind: QueryKind.SimilarCase,
+            Scopes: ScopeDtos.Empty,
+            RetrievalClasses: new[] { RetrievalClass.SimilarCase },
+            MinimumAuthority: AuthorityLevel.Draft,
+            Status: KnowledgeStatus.Active,
+            TopK: 3,
+            IncludeEvidence: false,
+            IncludeRawDetails: false);
+
+        var taskShape = new SimilarCaseShapeDto(
+            TaskType: "ui-only",
+            FeatureShape: "card-refresh",
+            EngineChangeAllowed: false,
+            LikelyLayers: new[] { "ui" },
+            RiskSignals: null,
+            Complexity: null);
+
+        var metadataStore = new InMemorySearchRequestContextStore();
+        metadataStore.Set("req:suf", new SearchRequestContext(
+            TaskId: "task-1",
+            ChunkId: "c1",
+            ChunkType: "similar_case",
+            RetrievalRoleHint: "SimilarCase",
+            TaskShape: taskShape,
+            StructuredScopes: null,
+            Purpose: "harness_retrieval"));
+
+        string? capturedBody = null;
+        var handler = new FakeEmbedMessageHandler(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            var responseJson = """
+            {
+              "schema_version": "1.1",
+              "request_id": "req:suf",
+              "task_id": "task-1",
+              "provider": "sentence_transformers",
+              "model_name": "m",
+              "model_version": null,
+              "normalize_embeddings": true,
+              "dimension": 3,
+              "fallback_mode": false,
+              "text_processing_id": "tp",
+              "vector_space_id": "vs",
+              "items": [
+                {
+                  "item_id": "req:suf",
+                  "chunk_id": "c1",
+                  "chunk_type": "similar_case",
+                  "query_kind": "SimilarCase",
+                  "retrieval_role_hint": "SimilarCase",
+                  "vector": [0.1, 0.2, 0.3],
+                  "input_char_count": 40,
+                  "effective_text_char_count": 40,
+                  "truncated": false,
+                  "warnings": []
+                }
+              ],
+              "warnings": []
+            }
+            """;
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var http = new HttpClient(handler);
+        var cfg = new EmbeddingConfig
+        {
+            QueryEmbeddingProvider = "LocalHttp",
+            Endpoint = "http://test/embed-query",
+            Model = "m",
+            TimeoutSeconds = 30
+        };
+
+        var svc = new LocalHttpQueryEmbeddingService(cfg, http, metadataStore);
+        _ = svc.EmbedAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+
+        Assert.NotNull(capturedBody);
+        using var doc = JsonDocument.Parse(capturedBody);
+        var items = doc.RootElement.GetProperty("items");
+        var item = items[0];
+
+        Assert.Equal("ui-only card refresh with no engine change", item.GetProperty("text").GetString());
+        Assert.Equal("c1", item.GetProperty("chunk_id").GetString());
+
+        var taskShapeProp = item.GetProperty("task_shape");
+        Assert.Equal("ui-only", taskShapeProp.GetProperty("task_type").GetString());
+        Assert.Equal("card-refresh", taskShapeProp.GetProperty("feature_shape").GetString());
+        Assert.Equal(false, taskShapeProp.GetProperty("engine_change_allowed").GetBoolean());
     }
 
     [Fact]
@@ -419,7 +570,7 @@ public sealed class UnitTest1
     }
 
     [Fact]
-    public async Task LocalHttpQueryEmbeddingService_SendsEmbedQueryEnvelopeAndParsesResponse()
+    public async Task LocalHttpQueryEmbeddingService_SendsDirectSearchEnvelopeAndParsesResponse()
     {
         var request = new SearchKnowledgeRequest(
             SchemaVersion: "ignored",
@@ -440,18 +591,18 @@ public sealed class UnitTest1
             using var doc = JsonDocument.Parse(body);
             Assert.Equal("1.1", doc.RootElement.GetProperty("schema_version").GetString());
             Assert.Equal("req:suf", doc.RootElement.GetProperty("request_id").GetString());
-                Assert.Equal("req", doc.RootElement.GetProperty("task_id").GetString());
+            Assert.True(doc.RootElement.GetProperty("task_id").ValueKind == JsonValueKind.Null);
             Assert.Equal("mcp", doc.RootElement.GetProperty("caller").GetString());
-            Assert.Equal("harness_retrieval", doc.RootElement.GetProperty("purpose").GetString());
+            Assert.Equal("direct_search", doc.RootElement.GetProperty("purpose").GetString());
             var items = doc.RootElement.GetProperty("items");
             Assert.Equal(1, items.GetArrayLength());
             var item = items[0];
             Assert.Equal("req:suf", item.GetProperty("item_id").GetString());
-                Assert.Equal("CoreTask", item.GetProperty("query_kind").GetString());
-                Assert.Equal("CoreTask", item.GetProperty("retrieval_role_hint").GetString());
+            Assert.Equal("CoreTask", item.GetProperty("query_kind").GetString());
+            Assert.Equal("CoreTask", item.GetProperty("retrieval_role_hint").GetString());
             Assert.Equal("hello world", item.GetProperty("text").GetString());
-                Assert.Equal("suf", item.GetProperty("chunk_id").GetString());
-                Assert.Equal("core_task", item.GetProperty("chunk_type").GetString());
+            Assert.True(item.GetProperty("chunk_id").ValueKind == JsonValueKind.Null);
+            Assert.Equal("core_task", item.GetProperty("chunk_type").GetString());
             Assert.True(item.GetProperty("structured_scopes").ValueKind == JsonValueKind.Null);
             Assert.True(item.GetProperty("task_shape").ValueKind == JsonValueKind.Null);
 
@@ -472,12 +623,12 @@ public sealed class UnitTest1
                 {
                   "item_id": "req:suf",
                   "chunk_id": null,
-                  "chunk_type": null,
+                  "chunk_type": "core_task",
                   "query_kind": "CoreTask",
                   "retrieval_role_hint": "CoreTask",
                   "vector": [0.1, 0.2, 0.3],
                   "input_char_count": 11,
-                  "effective_text_char_count": 11,
+                  "effective_text_char_count": 10,
                   "truncated": true,
                   "warnings": ["item-warn"]
                 }
@@ -513,11 +664,94 @@ public sealed class UnitTest1
         Assert.Equal("tp", result.TextProcessingId);
         Assert.Equal("vs", result.VectorSpaceId);
         Assert.Equal(11, result.InputCharCount);
-        Assert.Equal(11, result.EffectiveTextCharCount);
+        Assert.Equal(10, result.EffectiveTextCharCount); // truncated=true means effective < input
         Assert.True(result.Truncated);
         Assert.Equal(2, result.Warnings.Count);
         Assert.Equal("top-warn", result.Warnings[0]);
         Assert.Equal("item-warn", result.Warnings[1]);
+    }
+
+    [Fact]
+    public async Task LocalHttpQueryEmbeddingService_SendsHarnessRetrievalEnvelopeAndParsesResponse()
+    {
+        var request = new SearchKnowledgeRequest(
+            SchemaVersion: "ignored",
+            RequestId: "req:suf",
+            QueryText: "hello world",
+            QueryKind: QueryKind.CoreTask,
+            Scopes: ScopeDtos.Empty,
+            RetrievalClasses: Array.Empty<RetrievalClass>(),
+            MinimumAuthority: AuthorityLevel.Draft,
+            Status: KnowledgeStatus.Active,
+            TopK: 3,
+            IncludeEvidence: false,
+            IncludeRawDetails: false);
+
+        var metadataStore = new InMemorySearchRequestContextStore();
+        metadataStore.Set("req:suf", new SearchRequestContext("task-id", "chunk-id", "core_task", "CoreTask", null, null, "harness_retrieval"));
+
+        var handler = new FakeEmbedMessageHandler(async (req, ct) =>
+        {
+            var body = await req.Content!.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(body);
+            Assert.Equal("task-id", doc.RootElement.GetProperty("task_id").GetString());
+            Assert.Equal("harness_retrieval", doc.RootElement.GetProperty("purpose").GetString());
+            var items = doc.RootElement.GetProperty("items");
+            var item = items[0];
+            Assert.Equal("chunk-id", item.GetProperty("chunk_id").GetString());
+            Assert.Equal("core_task", item.GetProperty("chunk_type").GetString());
+
+            var responseJson = """
+            {
+              "schema_version": "1.1",
+              "request_id": "req:suf",
+              "task_id": "task-id",
+              "provider": "sentence_transformers",
+              "model_name": "m",
+              "model_version": null,
+              "normalize_embeddings": true,
+              "dimension": 3,
+              "fallback_mode": false,
+              "text_processing_id": "tp",
+              "vector_space_id": "vs",
+              "items": [
+                {
+                  "item_id": "req:suf",
+                  "chunk_id": "chunk-id",
+                  "chunk_type": "core_task",
+                  "query_kind": "CoreTask",
+                  "retrieval_role_hint": "CoreTask",
+                  "vector": [0.1, 0.2, 0.3],
+                  "input_char_count": 11,
+                  "effective_text_char_count": 10,
+                  "truncated": true,
+                  "warnings": []
+                }
+              ],
+              "warnings": []
+            }
+            """;
+
+            var resp = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            };
+            return resp;
+        });
+
+        var http = new HttpClient(handler);
+        var cfg = new EmbeddingConfig
+        {
+            QueryEmbeddingProvider = "LocalHttp",
+            Endpoint = "http://test/embed-query",
+            Model = "m",
+            TimeoutSeconds = 30
+        };
+
+        var svc = new LocalHttpQueryEmbeddingService(cfg, http, metadataStore);
+        var result = await svc.EmbedAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+        Assert.Equal(3, result.Vector.Length);
     }
 
     [Fact]
@@ -552,8 +786,9 @@ public sealed class UnitTest1
             using var doc = JsonDocument.Parse(body);
             var item = doc.RootElement.GetProperty("items")[0];
             Assert.True(item.GetProperty("structured_scopes").ValueKind == JsonValueKind.Object);
-            Assert.Equal(1, item.GetProperty("structured_scopes").GetProperty("Layers").GetArrayLength());
-            Assert.Equal("engine", item.GetProperty("structured_scopes").GetProperty("Layers")[0].GetString());
+            // Now uses snake_case per contract: "layers" not "Layers"
+            Assert.Equal(1, item.GetProperty("structured_scopes").GetProperty("layers").GetArrayLength());
+            Assert.Equal("engine", item.GetProperty("structured_scopes").GetProperty("layers")[0].GetString());
 
             var responseJson = """
             {
@@ -572,7 +807,7 @@ public sealed class UnitTest1
                 {
                   "item_id": "req:suf",
                   "chunk_id": null,
-                  "chunk_type": null,
+                  "chunk_type": "core_task",
                   "query_kind": "CoreTask",
                   "retrieval_role_hint": "CoreTask",
                   "vector": [0.1],
@@ -1046,7 +1281,7 @@ public sealed class UnitTest1
     }
 
     [Fact]
-    public void EmbeddingCompatibilityChecker_TextProcessingMismatch_DegradeOrIncompatibleBasedOnConfig()
+    public void EmbeddingCompatibilityChecker_MissingStoredIdentity_DegradesSemanticQuality()
     {
         var checker = new EmbeddingCompatibilityChecker();
         var stored = new StoredEmbeddingMetadata(
@@ -1055,9 +1290,11 @@ public sealed class UnitTest1
             Dimension: 2,
             NormalizeEmbeddings: null,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask");
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: null,
+            VectorSpaceId: null);
 
-        var baseQuery = new QueryEmbeddingResult(
+        var query = new QueryEmbeddingResult(
             Vector: new float[] { 0f, 1f },
             Provider: "p",
             ModelName: "m",
@@ -1065,56 +1302,43 @@ public sealed class UnitTest1
             NormalizeEmbeddings: false,
             Dimension: 2,
             FallbackMode: false,
-            TextProcessingId: "tp-mismatch",
-            VectorSpaceId: "vs",
+            TextProcessingId: "tp-id",
+            VectorSpaceId: "vs-id",
             InputCharCount: 1,
             EffectiveTextCharCount: 1,
             Truncated: false,
             Warnings: Array.Empty<string>());
 
-        var cfgDegrade = new EmbeddingConfig
+        var cfg = new EmbeddingConfig
         {
             RequireCompatibilityCheck = true,
             AllowHashingFallback = true,
-            AllowLexicalFallbackOnSemanticIncompatibility = true,
-            ExpectedTextProcessingId = "tp-expected",
-            TreatTextProcessingMismatchAsIncompatible = false
+            AllowLexicalFallbackOnSemanticIncompatibility = true
         };
 
-        var resDegrade = checker.Check(baseQuery, stored, cfgDegrade);
-        Assert.True(resDegrade.IsCompatible);
-        Assert.True(resDegrade.SemanticQualityDegraded);
-        Assert.Contains("text-processing-mismatch", resDegrade.DegradationSignals);
-
-        var cfgIncompatible = new EmbeddingConfig
-        {
-            RequireCompatibilityCheck = cfgDegrade.RequireCompatibilityCheck,
-            AllowHashingFallback = cfgDegrade.AllowHashingFallback,
-            AllowLexicalFallbackOnSemanticIncompatibility = cfgDegrade.AllowLexicalFallbackOnSemanticIncompatibility,
-            ExpectedTextProcessingId = cfgDegrade.ExpectedTextProcessingId,
-            TreatTextProcessingMismatchAsIncompatible = true,
-            ExpectedVectorSpaceId = cfgDegrade.ExpectedVectorSpaceId,
-            TreatVectorSpaceMismatchAsIncompatible = cfgDegrade.TreatVectorSpaceMismatchAsIncompatible
-        };
-        var resIncompatible = checker.Check(baseQuery, stored, cfgIncompatible);
-        Assert.False(resIncompatible.IsCompatible);
-        Assert.False(resIncompatible.SemanticQualityDegraded);
-        Assert.Contains("incompatible:text-processing-mismatch", resIncompatible.Reason);
+        var res = checker.Check(query, stored, cfg);
+        Assert.True(res.IsCompatible);
+        Assert.True(res.SemanticQualityDegraded);
+        Assert.Contains("missing-stored-normalize-metadata", res.DegradationSignals);
+        Assert.Contains("missing-stored-text-processing-id", res.DegradationSignals);
+        Assert.Contains("missing-stored-vector-space-id", res.DegradationSignals);
     }
 
     [Fact]
-    public void EmbeddingCompatibilityChecker_VectorSpaceMismatch_DegradeOrIncompatibleBasedOnConfig()
+    public void EmbeddingCompatibilityChecker_MatchingStoredIdentity_NoDegradation()
     {
         var checker = new EmbeddingCompatibilityChecker();
         var stored = new StoredEmbeddingMetadata(
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask");
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp-id",
+            VectorSpaceId: "vs-id");
 
-        var baseQuery = new QueryEmbeddingResult(
+        var query = new QueryEmbeddingResult(
             Vector: new float[] { 0f, 1f },
             Provider: "p",
             ModelName: "m",
@@ -1122,46 +1346,23 @@ public sealed class UnitTest1
             NormalizeEmbeddings: false,
             Dimension: 2,
             FallbackMode: false,
-            TextProcessingId: "tp",
-            VectorSpaceId: "vs-mismatch",
+            TextProcessingId: "tp-id",
+            VectorSpaceId: "vs-id",
             InputCharCount: 1,
             EffectiveTextCharCount: 1,
             Truncated: false,
             Warnings: Array.Empty<string>());
 
-        var cfgDegrade = new EmbeddingConfig
+        var cfg = new EmbeddingConfig
         {
             RequireCompatibilityCheck = true,
             AllowHashingFallback = true,
-            AllowLexicalFallbackOnSemanticIncompatibility = true,
-            ExpectedVectorSpaceId = "vs-expected",
-            TreatVectorSpaceMismatchAsIncompatible = false
+            AllowLexicalFallbackOnSemanticIncompatibility = true
         };
 
-        var resDegrade = checker.Check(baseQuery, stored, cfgDegrade);
-        Assert.True(resDegrade.IsCompatible);
-        Assert.True(resDegrade.SemanticQualityDegraded);
-        Assert.Contains("vector-space-mismatch", resDegrade.DegradationSignals);
-
-        var cfgIncompatible = new EmbeddingConfig
-        {
-            RequireCompatibilityCheck = cfgDegrade.RequireCompatibilityCheck,
-            AllowHashingFallback = cfgDegrade.AllowHashingFallback,
-            AllowLexicalFallbackOnSemanticIncompatibility = cfgDegrade.AllowLexicalFallbackOnSemanticIncompatibility,
-            ExpectedVectorSpaceId = cfgDegrade.ExpectedVectorSpaceId,
-            TreatVectorSpaceMismatchAsIncompatible = true,
-            ExpectedTextProcessingId = cfgDegrade.ExpectedTextProcessingId,
-            TreatTextProcessingMismatchAsIncompatible = cfgDegrade.TreatTextProcessingMismatchAsIncompatible,
-            QueryEmbeddingProvider = cfgDegrade.QueryEmbeddingProvider,
-            Endpoint = cfgDegrade.Endpoint,
-            Model = cfgDegrade.Model,
-            TimeoutSeconds = cfgDegrade.TimeoutSeconds,
-            // Keep only the single AllowLexicalFallbackOnSemanticIncompatibility assignment above.
-        };
-        var resIncompatible = checker.Check(baseQuery, stored, cfgIncompatible);
-        Assert.False(resIncompatible.IsCompatible);
-        Assert.False(resIncompatible.SemanticQualityDegraded);
-        Assert.Contains("incompatible:vector-space-mismatch", resIncompatible.Reason);
+        var res = checker.Check(query, stored, cfg);
+        Assert.True(res.IsCompatible);
+        Assert.False(res.SemanticQualityDegraded);
     }
 
     private sealed class NoOpValidator : IRequestValidator
@@ -1309,9 +1510,11 @@ public sealed class UnitTest1
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask"));
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs"));
 
         var checker = new EmbeddingCompatibilityChecker();
 
@@ -1376,9 +1579,11 @@ public sealed class UnitTest1
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask"));
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs"));
 
         var checker = new EmbeddingCompatibilityChecker();
 
@@ -1407,8 +1612,8 @@ public sealed class UnitTest1
 
         var resp = await svc.SearchKnowledgeAsync(req, CancellationToken.None).ConfigureAwait(false);
         Assert.Equal(1, repo.SemanticCallCount);
-        Assert.Equal("semantic-active:degraded:m:text-truncated-before-embedding", resp.Diagnostics.QueryEmbeddingModel);
-        Assert.Equal("CoreTask|degraded", resp.Diagnostics.EmbeddingRoleUsed);
+        Assert.StartsWith("semantic-active:degraded:m:", resp.Diagnostics.QueryEmbeddingModel);
+        Assert.Contains("text-truncated-before-embedding", resp.Diagnostics.QueryEmbeddingModel);
     }
 
     [Fact]

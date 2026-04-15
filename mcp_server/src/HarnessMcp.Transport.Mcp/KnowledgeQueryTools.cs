@@ -51,13 +51,8 @@ public sealed class KnowledgeQueryTools(
                 c.Results.Decisions.Count + c.Results.BestPractices.Count + c.Results.Antipatterns.Count +
                 c.Results.SimilarCases.Count + c.Results.Constraints.Count + c.Results.References.Count +
                 c.Results.Structures.Count);
-            var summary = JsonSerializer.Serialize(new
-            {
-                chunkCount = resp.ChunkResults.Count,
-                totalItems = total,
-                notes = resp.Notes.Count,
-                elapsedMs = resp.ElapsedMs
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeRetrieveMemoryByChunks(
+                resp.ChunkResults.Count, total, resp.Notes.Count, resp.ElapsedMs);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.RequestSuccess, request.RequestId,
                 "retrieve_memory_by_chunks", request.TaskId, "Information",
@@ -80,18 +75,9 @@ public sealed class KnowledgeQueryTools(
         try
         {
             var resp = await mergeService.MergeRetrievalResultsAsync(request, cancellationToken).ConfigureAwait(false);
-            var summary = JsonSerializer.Serialize(new
-            {
-                decisions = resp.Decisions.Count,
-                constraints = resp.Constraints.Count,
-                best = resp.BestPractices.Count,
-                anti = resp.AntiPatterns.Count,
-                similar = resp.SimilarCases.Count,
-                refs = resp.References.Count,
-                structures = resp.Structures.Count,
-                warnings = resp.Warnings.Count,
-                elapsedMs = resp.ElapsedMs
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeMergeRetrievalResults(
+                resp.Decisions.Count, resp.Constraints.Count, resp.BestPractices.Count, resp.AntiPatterns.Count,
+                resp.SimilarCases.Count, resp.References.Count, resp.Structures.Count, resp.Warnings.Count, resp.ElapsedMs);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.MergeTiming, request.RequestId,
                 "merge_retrieval_results", request.TaskId, "Information",
@@ -119,19 +105,10 @@ public sealed class KnowledgeQueryTools(
         {
             var resp = await contextPackService.BuildMemoryContextPackAsync(request, cancellationToken).ConfigureAwait(false);
             var s = resp.ContextPack;
-            var summary = JsonSerializer.Serialize(new
-            {
-                taskId = request.TaskId,
-                decisions = s.Decisions.Count,
-                constraints = s.Constraints.Count,
-                best = s.BestPractices.Count,
-                anti = s.AntiPatterns.Count,
-                similar = s.SimilarCases.Count,
-                refs = s.References.Count,
-                structures = s.Structures.Count,
-                warnings = resp.Diagnostics.Warnings.Count,
-                elapsedMs = resp.Diagnostics.AssemblyElapsedMs
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeBuildMemoryContextPack(
+                request.TaskId, s.Decisions.Count, s.Constraints.Count, s.BestPractices.Count,
+                s.AntiPatterns.Count, s.SimilarCases.Count, s.References.Count, s.Structures.Count,
+                resp.Diagnostics.Warnings.Count, resp.Diagnostics.AssemblyElapsedMs);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.ContextPackBuilt, request.RequestId,
                 "build_memory_context_pack", request.TaskId, "Information",
@@ -158,14 +135,9 @@ public sealed class KnowledgeQueryTools(
         try
         {
             var resp = await searchService.SearchKnowledgeAsync(request, cancellationToken).ConfigureAwait(false);
-            var summary = JsonSerializer.Serialize(new
-            {
-                queryKind = request.QueryKind.ToString(),
-                final = resp.Diagnostics.FinalCandidateCount,
-                lexical = resp.Diagnostics.LexicalCandidateCount,
-                vector = resp.Diagnostics.VectorCandidateCount,
-                elapsedMs = resp.Diagnostics.ElapsedMs
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeSearchKnowledge(
+                request.QueryKind.ToString(), resp.Diagnostics.FinalCandidateCount,
+                resp.Diagnostics.LexicalCandidateCount, resp.Diagnostics.VectorCandidateCount, resp.Diagnostics.ElapsedMs);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.RequestSuccess, request.RequestId,
                 "search_knowledge", null, "Information",
@@ -188,12 +160,8 @@ public sealed class KnowledgeQueryTools(
         try
         {
             var resp = await readService.GetKnowledgeItemAsync(request, cancellationToken).ConfigureAwait(false);
-            var summary = JsonSerializer.Serialize(new
-            {
-                itemId = request.KnowledgeItemId,
-                relations = resp.Relations.Count,
-                segments = resp.Segments.Count
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeGetKnowledgeItem(
+                request.KnowledgeItemId, resp.Relations.Count, resp.Segments.Count);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.RequestSuccess, request.RequestId,
                 "get_knowledge_item", null, "Information",
@@ -216,12 +184,8 @@ public sealed class KnowledgeQueryTools(
         try
         {
             var resp = await relatedService.GetRelatedKnowledgeAsync(request, cancellationToken).ConfigureAwait(false);
-            var summary = JsonSerializer.Serialize(new
-            {
-                root = request.KnowledgeItemId,
-                relationTypes = request.RelationTypes.Count,
-                returned = resp.Items.Count
-            });
+            var summary = MonitorPayloadPreviewJson.SerializeGetRelatedKnowledge(
+                request.KnowledgeItemId, request.RelationTypes.Count, resp.Items.Count);
             monitorEventSink.Publish(new MonitorEventDto(
                 0, DateTimeOffset.UtcNow, MonitorEventKind.RequestSuccess, request.RequestId,
                 "get_related_knowledge", null, "Information",
@@ -240,7 +204,7 @@ public sealed class KnowledgeQueryTools(
     {
         Start("get_server_info", null, null);
         var resp = appInfoProvider.GetServerInfo();
-        var summary = JsonSerializer.Serialize(new { name = resp.ServerName, version = resp.ServerVersion, mode = resp.ProtocolMode });
+        var summary = MonitorPayloadPreviewJson.SerializeServerInfo(resp.ServerName, resp.ServerVersion, resp.ProtocolMode);
         monitorEventSink.Publish(new MonitorEventDto(
             0, DateTimeOffset.UtcNow, MonitorEventKind.RequestSuccess, null,
             "get_server_info", null, "Information",

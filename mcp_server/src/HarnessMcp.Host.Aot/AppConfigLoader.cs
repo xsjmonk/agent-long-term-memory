@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using HarnessMcp.Contracts;
 
 namespace HarnessMcp.Host.Aot;
@@ -18,11 +18,18 @@ public static class AppConfigLoader
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Missing config: {fullPath}");
 
-        var json = File.ReadAllText(fullPath);
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(fullPath, optional: false, reloadOnChange: false)
+            .Build();
 
-        var cfg = JsonSerializer.Deserialize(json, AppConfigJsonSerializerContext.Default.AppConfig);
-        if (cfg is null)
-            throw new InvalidOperationException($"Failed to deserialize AppConfig from '{fullPath}'.");
+        var cfg = new AppConfig();
+        configuration.GetSection("Server").Bind(cfg.Server);
+        configuration.GetSection("Database").Bind(cfg.Database);
+        configuration.GetSection("Retrieval").Bind(cfg.Retrieval);
+        configuration.GetSection("Embedding").Bind(cfg.Embedding);
+        configuration.GetSection("Logging").Bind(cfg.Logging);
+        configuration.GetSection("Monitoring").Bind(cfg.Monitoring);
+        configuration.GetSection("Features").Bind(cfg.Features);
 
         // Apply command-line override after file is loaded.
         if (args.Length > 0 && string.Equals(args[0], "--transport", StringComparison.OrdinalIgnoreCase) && args.Length > 1)

@@ -6,7 +6,8 @@ namespace HarnessMcp.Core;
 
 public sealed class HybridRankingService(
     IAuthorityPolicy authority,
-    ICaseShapeScoreProvider caseShapes) : IHybridRankingService
+    ICaseShapeScoreProvider caseShapes,
+    ISearchRequestContextStore? contextStore) : IHybridRankingService
 {
     public IReadOnlyList<KnowledgeCandidateDto> Rank(
         IReadOnlyList<KnowledgeCandidateDto> lexical,
@@ -53,7 +54,7 @@ public sealed class HybridRankingService(
             var scopeScore = ComputeScopeScore(request.Scopes, c.Scopes);
             var authorityScore = AuthorityToScore(c.Authority);
             var caseShapeScore = request.QueryKind == QueryKind.SimilarCase
-                ? caseShapes.ComputeScore(request, c.KnowledgeItemId)
+                ? ComputeSimilarCaseScore(request.RequestId, c.KnowledgeItemId)
                 : c.CaseShapeScore;
 
             var final = 0.50 * c.SemanticScore +
@@ -154,4 +155,12 @@ public sealed class HybridRankingService(
         AuthorityLevel.Canonical => 1.00,
         _ => 0
     };
+
+    private double ComputeSimilarCaseScore(string requestId, Guid knowledgeItemId)
+    {
+        if (!contextStore.TryGet(requestId, out var context) || context?.TaskShape is null)
+            return 0;
+
+        return caseShapes.ComputeScore(knowledgeItemId, context.TaskShape);
+    }
 }

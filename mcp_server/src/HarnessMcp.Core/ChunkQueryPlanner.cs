@@ -1,4 +1,3 @@
-using System.Text.Json;
 using HarnessMcp.Contracts;
 
 namespace HarnessMcp.Core;
@@ -13,9 +12,7 @@ public sealed class ChunkQueryPlanner : IChunkQueryPlanner
         var (kind, classes) = Map(chunk.ChunkType);
         var scopes = chunk.StructuredScopes ?? ScopeDtos.Empty;
 
-        var queryText = chunk.ChunkType == ChunkType.SimilarCase
-            ? JsonSerializer.Serialize(chunk.TaskShape, AppJsonSerializerContext.Default.SimilarCaseShapeDto)
-            : (chunk.Text ?? string.Empty);
+        var queryText = chunk.Text ?? string.Empty;
 
         return new SearchKnowledgeRequest(
             request.SchemaVersion,

@@ -51,6 +51,9 @@ public static class SemanticStateFormatting
             "vector-space-mismatch" => "vector-space mismatch",
             "builder-warning:builder-warning" => "builder warning",
             "builder-warning:hashing-fallback-active" => "builder warning hashing fallback active",
+            "missing-stored-normalize-metadata" => "missing stored normalize metadata",
+            "missing-stored-text-processing-id" => "missing stored text-processing id",
+            "missing-stored-vector-space-id" => "missing stored vector-space id",
             _ => signalSlug.Replace('-', ' ')
         };
     }

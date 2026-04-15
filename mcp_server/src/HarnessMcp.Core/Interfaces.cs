@@ -169,7 +169,7 @@ public interface IKnowledgeRepository
 
 public interface ICaseShapeScoreProvider
 {
-    double ComputeScore(SearchKnowledgeRequest request, Guid knowledgeItemId);
+    double ComputeScore(Guid knowledgeItemId, SimilarCaseShapeDto? requestedShape);
 }
 
 public interface IMonitoringSnapshotService
@@ -181,3 +181,29 @@ public interface IMonitorEventBroadcaster
 {
     ValueTask BroadcastAsync(MonitorEventDto evt, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// MCP-owned internal request context store.
+/// Used to correlate a search request with /embed-query envelope fields and SimilarCase structural ranking.
+/// This is NOT a harness dependency - it is MCP internal state created from MCP request DTOs
+/// and lives only during request processing (not persisted, not exposed publicly).
+/// </summary>
+public interface ISearchRequestContextStore
+{
+    void Set(string requestId, SearchRequestContext context);
+    bool TryGet(string requestId, out SearchRequestContext? context);
+    void Remove(string requestId);
+}
+
+/// <summary>
+/// MCP-owned internal request context.
+/// Created from MCP request DTOs, used only during request processing for /embed-query envelope construction.
+/// </summary>
+public sealed record SearchRequestContext(
+    string? TaskId,
+    string? ChunkId,
+    string? ChunkType,
+    string? RetrievalRoleHint,
+    SimilarCaseShapeDto? TaskShape,
+    ScopeFilterDto? StructuredScopes,
+    string Purpose);

@@ -490,7 +490,7 @@ public sealed class PostgresKnowledgeRepository : IKnowledgeRepository
             var sourceArtifactId = reader.GetGuid(1);
             var sourcePath = reader.IsDBNull(2) ? null : reader.GetString(2);
             var headingPathJson = reader.IsDBNull(3) ? "[]" : reader.GetString(3);
-            var headingPath = JsonSerializer.Deserialize<string[]>(headingPathJson) ?? Array.Empty<string>();
+            var headingPath = TryReadStringArray(headingPathJson);
             var snippetRaw = reader.IsDBNull(4) ? "" : reader.GetString(4);
             var snippet = EvidenceSnippetReader.Read(snippetRaw, _monitoring.MaxPayloadPreviewChars);
             int? startLine = reader.IsDBNull(5) ? null : reader.GetInt32(5);
@@ -527,7 +527,7 @@ public sealed class PostgresKnowledgeRepository : IKnowledgeRepository
             var segId = reader.GetGuid(0);
             var spanLevel = reader.GetString(1);
             var headingPathJson = reader.IsDBNull(2) ? "[]" : reader.GetString(2);
-            var headingPath = JsonSerializer.Deserialize<string[]>(headingPathJson) ?? Array.Empty<string>();
+            var headingPath = TryReadStringArray(headingPathJson);
             int? startLine = reader.IsDBNull(3) ? null : reader.GetInt32(3);
             int? endLine = reader.IsDBNull(4) ? null : reader.GetInt32(4);
             int? startOffset = reader.IsDBNull(5) ? null : reader.GetInt32(5);
@@ -822,6 +822,20 @@ LIMIT @limit
             "archived" => KnowledgeStatus.Archived,
             _ => KnowledgeStatus.Active
         };
+
+    private static string[] TryReadStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+        try
+        {
+            return JsonSerializer.Deserialize(json, InfrastructureJsonSerializerContext.Default.StringArray) ?? Array.Empty<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
 
     private readonly record struct LexicalRow(
         Guid Id,

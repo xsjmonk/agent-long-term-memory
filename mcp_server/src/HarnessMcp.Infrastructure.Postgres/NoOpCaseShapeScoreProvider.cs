@@ -5,5 +5,5 @@ namespace HarnessMcp.Infrastructure.Postgres;
 
 public sealed class NoOpCaseShapeScoreProvider : ICaseShapeScoreProvider
 {
-    public double ComputeScore(SearchKnowledgeRequest request, Guid knowledgeItemId) => 0;
+    public double ComputeScore(Guid knowledgeItemId, SimilarCaseShapeDto? requestedShape) => 0;
 }

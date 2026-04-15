@@ -6,5 +6,7 @@ public sealed record StoredEmbeddingMetadata(
     int Dimension,
     bool? NormalizeEmbeddings,
     bool HasRows,
-    string SelectedEmbeddingRole);
+    string SelectedEmbeddingRole,
+    string? TextProcessingId = null,
+    string? VectorSpaceId = null);
 

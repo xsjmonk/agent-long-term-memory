@@ -6,7 +6,6 @@ namespace HarnessMcp.Contracts;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(AppConfig))]
-[JsonSerializable(typeof(ServerApiConfig))]
 [JsonSerializable(typeof(ServerConfig))]
 [JsonSerializable(typeof(DatabaseConfig))]
 [JsonSerializable(typeof(RetrievalConfig))]

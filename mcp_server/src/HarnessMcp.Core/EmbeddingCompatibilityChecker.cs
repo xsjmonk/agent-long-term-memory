@@ -39,7 +39,7 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
             if (!config.RequireCompatibilityCheck)
             {
                 // No hard metadata check, but we still allow degradation to be surfaced.
-                var noMetadataIncompatibilityReason = CollectDegradationSignals(query, config, AddDegradation);
+                var noMetadataIncompatibilityReason = CollectDegradationSignals(query, stored, config, AddDegradation);
                 if (noMetadataIncompatibilityReason is not null)
                     return new EmbeddingCompatibilityResult(
                         IsCompatible: false,
@@ -101,7 +101,7 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
                 DegradationSignals: EmptySignals());
 
         // ---- Semantic-quality degradation signals (non-blocking) ----
-        var incompatibilityReason = CollectDegradationSignals(query, config, AddDegradation);
+        var incompatibilityReason = CollectDegradationSignals(query, stored, config, AddDegradation);
         if (incompatibilityReason is not null)
             return new EmbeddingCompatibilityResult(
                 IsCompatible: false,
@@ -124,6 +124,7 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
 
     private static string? CollectDegradationSignals(
         QueryEmbeddingResult query,
+        StoredEmbeddingMetadata? stored,
         Contracts.EmbeddingConfig config,
         Action<string> addDegradation)
     {
@@ -138,21 +139,30 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
             addDegradation(isHashingFallback ? "builder-warning:hashing-fallback-active" : "builder-warning:builder-warning");
         }
 
-        if (!string.IsNullOrWhiteSpace(config.ExpectedTextProcessingId) &&
-            !string.Equals(config.ExpectedTextProcessingId, query.TextProcessingId, StringComparison.OrdinalIgnoreCase))
-        {
-            if (config.TreatTextProcessingMismatchAsIncompatible)
-                return "incompatible:text-processing-mismatch";
+        if (stored is null)
+            return null;
 
+        // Missing stored identity fields -> degradation signals
+        if (!stored.NormalizeEmbeddings.HasValue)
+            addDegradation("missing-stored-normalize-metadata");
+
+        if (string.IsNullOrWhiteSpace(stored.TextProcessingId))
+            addDegradation("missing-stored-text-processing-id");
+
+        if (string.IsNullOrWhiteSpace(stored.VectorSpaceId))
+            addDegradation("missing-stored-vector-space-id");
+
+        // Compare text_processing_id only when stored metadata provides it
+        if (!string.IsNullOrWhiteSpace(stored.TextProcessingId) &&
+            !string.Equals(stored.TextProcessingId, query.TextProcessingId, StringComparison.OrdinalIgnoreCase))
+        {
             addDegradation("text-processing-mismatch");
         }
 
-        if (!string.IsNullOrWhiteSpace(config.ExpectedVectorSpaceId) &&
-            !string.Equals(config.ExpectedVectorSpaceId, query.VectorSpaceId, StringComparison.OrdinalIgnoreCase))
+        // Compare vector_space_id only when stored metadata provides it
+        if (!string.IsNullOrWhiteSpace(stored.VectorSpaceId) &&
+            !string.Equals(stored.VectorSpaceId, query.VectorSpaceId, StringComparison.OrdinalIgnoreCase))
         {
-            if (config.TreatVectorSpaceMismatchAsIncompatible)
-                return "incompatible:vector-space-mismatch";
-
             addDegradation("vector-space-mismatch");
         }
 

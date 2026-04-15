@@ -2,7 +2,6 @@ namespace HarnessMcp.Contracts;
 
 public sealed class AppConfig
 {
-    public ServerApiConfig ServerApi { get; set; } = new();
     public ServerConfig Server { get; set; } = new();
     public DatabaseConfig Database { get; set; } = new();
     public RetrievalConfig Retrieval { get; set; } = new();
@@ -10,12 +9,6 @@ public sealed class AppConfig
     public LoggingConfig Logging { get; set; } = new();
     public MonitoringConfig Monitoring { get; set; } = new();
     public FeatureConfig Features { get; set; } = new();
-}
-
-public sealed class ServerApiConfig
-{
-    public string McpEndpoint { get; set; } = "http://127.0.0.1:5081";
-    public string EmbeddingApi { get; set; } = "";
 }
 
 public sealed class ServerConfig
@@ -58,12 +51,6 @@ public sealed class EmbeddingConfig
     public bool RequireCompatibilityCheck { get; set; } = true;
     public bool AllowLexicalFallbackOnSemanticIncompatibility { get; set; } = true;
     public bool AllowHashingFallback { get; set; } = false;
-
-    // Optional expected metadata exposed by the builder-API. Used to surface semantic quality degradation.
-    public string? ExpectedTextProcessingId { get; set; }
-    public string? ExpectedVectorSpaceId { get; set; }
-    public bool TreatTextProcessingMismatchAsIncompatible { get; set; } = false;
-    public bool TreatVectorSpaceMismatchAsIncompatible { get; set; } = false;
 }
 
 public sealed class LoggingConfig

@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Linq;
 using System.Text.Json;
 using HarnessMcp.Contracts;
@@ -736,7 +736,8 @@ public sealed class UnitTest1
 
             var rankedReal = new HybridRankingService(
                     new AuthorityPolicy(),
-                    new PostgresCaseShapeScoreProvider(dataSource, _fixture.Config.Database.SearchSchema))
+                    new PostgresCaseShapeScoreProvider(dataSource, _fixture.Config.Database.SearchSchema),
+                    null)
                 .Rank(lexical, Array.Empty<KnowledgeCandidateDto>(), req);
 
             Assert.NotEmpty(rankedReal);
@@ -744,7 +745,8 @@ public sealed class UnitTest1
 
             var rankedNoOp = new HybridRankingService(
                     new AuthorityPolicy(),
-                    new NoOpCaseShapeScoreProvider())
+                    new NoOpCaseShapeScoreProvider(),
+                    null)
                 .Rank(lexical, Array.Empty<KnowledgeCandidateDto>(), req);
 
             Assert.NotEmpty(rankedNoOp);

@@ -1,7 +1,9 @@
+using System.Text.Json;
 using HarnessMcp.Contracts;
 using HarnessMcp.Core;
 using HarnessMcp.Host.Aot;
 using HarnessMcp.Infrastructure.Postgres;
+using HarnessMcp.Transport.Mcp;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -108,10 +110,14 @@ static void RunHttp(string[] args, ComposedApplication composed, string configPa
                 "Error",
                 r.Message ?? "unhealthy",
                 null));
-        return r.IsHealthy ? Results.Ok(r) : Results.StatusCode(503);
+        return r.IsHealthy 
+            ? Results.Json(r, AppJsonSerializerContext.Default.HealthProbeResult) 
+            : Results.Json(r, AppJsonSerializerContext.Default.HealthProbeResult, statusCode: 503);
     });
 
-    app.MapGet("/readyz", () => Results.Ok(new { ready = true }));
+    app.MapGet("/readyz", () => Results.Json(
+        new ReadyResponseDto { Ready = true },
+        TransportJsonSerializerContext.Default.ReadyResponseDto));
 
     app.MapGet("/version", () =>
         Results.Json(composed.AppInfoProvider.GetServerInfo(), AppJsonSerializerContext.Default.ServerInfoResponse));

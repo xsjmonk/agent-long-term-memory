@@ -10,7 +10,6 @@ namespace HarnessMcp.Contracts;
     UseStringEnumConverter = true)]
 [
     JsonSerializable(typeof(AppConfig)),
-    JsonSerializable(typeof(ServerApiConfig)),
     JsonSerializable(typeof(ServerConfig)),
     JsonSerializable(typeof(DatabaseConfig)),
     JsonSerializable(typeof(RetrievalConfig)),

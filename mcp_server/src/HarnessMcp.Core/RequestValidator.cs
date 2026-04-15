@@ -31,7 +31,11 @@ public sealed class RequestValidator(RetrievalConfig retrieval) : IRequestValida
             if (chunk.ChunkType == ChunkType.SimilarCase)
             {
                 if (chunk.TaskShape is null)
-                    throw new ValidationException("similar_case chunk requires TaskShape.");
+                    throw new ValidationException($"Chunk {chunk.ChunkId} similar_case requires TaskShape.");
+                if (string.IsNullOrWhiteSpace(chunk.Text))
+                    throw new ValidationException($"Chunk {chunk.ChunkId} similar_case requires Text.");
+                if (chunk.Text.Length > _retrieval.MaxChunkTextLength)
+                    throw new ValidationException($"Chunk {chunk.ChunkId} text exceeds MaxChunkTextLength.");
             }
             else
             {
