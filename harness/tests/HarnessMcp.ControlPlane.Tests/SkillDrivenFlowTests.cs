@@ -38,7 +38,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void PlanningSkill_UsesHarnessAsSingleEntryPoint()
     {
-        var rulePath = GetRulePath("00-harness-control-plane.mdc");
+        var rulePath = GetRulePath("00-planning-mode-harness-control.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("invoke-harness-control-plane.ps1");
         ruleContent.Should().Contain("start-session");
@@ -48,7 +48,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void PlanningSkill_RequiresSubmitAfterEveryStage()
     {
-        var rulePath = GetRulePath("00-harness-control-plane.mdc");
+        var rulePath = GetRulePath("00-planning-mode-harness-control.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("submit-step-result");
         ruleContent.Should().Contain("nextAction");
@@ -57,7 +57,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void McpSkill_RequiresExactToolCall()
     {
-        var rulePath = GetRulePath("03-harness-mcp-stage.mdc");
+        var rulePath = GetRulePath("03-planning-mode-mcp-stage.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("nextAction");
         ruleContent.Should().Contain("EXACTLY");
@@ -66,7 +66,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void FailureSkill_StopsOnHarnessError()
     {
-        var rulePath = GetRulePath("01-harness-failure.mdc");
+        var rulePath = GetRulePath("01-planning-mode-failure-handling.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("stop_with_error");
         ruleContent.Should().Contain("STOP");
@@ -75,7 +75,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void ExecutionSkill_ForbidsIndependentMemoryRetrieval()
     {
-        var rulePath = GetRulePath("02-harness-execution.mdc");
+        var rulePath = GetRulePath("02-execution-mode-worker-only.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("long-term memory");
         ruleContent.Should().Contain("forbidden");
