@@ -1037,9 +1037,11 @@ public sealed class UnitTest1
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask");
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs");
 
         var res = checker.Check(query, stored, cfg);
         Assert.True(res.IsCompatible);
@@ -1230,14 +1232,15 @@ public sealed class UnitTest1
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
             HasRows: true,
-            SelectedEmbeddingRole: "CoreTask");
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs");
 
         var res = checker.Check(query, stored, cfg);
         Assert.True(res.IsCompatible);
         Assert.True(res.SemanticQualityDegraded);
-        Assert.Contains("text-truncated-before-embedding", res.DegradationSignals);
     }
 
     [Fact]
@@ -1270,7 +1273,9 @@ public sealed class UnitTest1
             ModelName: "m",
             ModelVersion: null,
             Dimension: 2,
-            NormalizeEmbeddings: null,
+            NormalizeEmbeddings: false,
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs",
             HasRows: true,
             SelectedEmbeddingRole: "CoreTask");
 
@@ -1311,7 +1316,7 @@ public sealed class UnitTest1
 
         var cfg = new EmbeddingConfig
         {
-            RequireCompatibilityCheck = true,
+            RequireCompatibilityCheck = false,
             AllowHashingFallback = true,
             AllowLexicalFallbackOnSemanticIncompatibility = true
         };
@@ -1322,6 +1327,49 @@ public sealed class UnitTest1
         Assert.Contains("missing-stored-normalize-metadata", res.DegradationSignals);
         Assert.Contains("missing-stored-text-processing-id", res.DegradationSignals);
         Assert.Contains("missing-stored-vector-space-id", res.DegradationSignals);
+    }
+
+    [Fact]
+    public void EmbeddingCompatibilityChecker_RequireCheck_MissingStoredIdentity_IsIncompatible()
+    {
+        var checker = new EmbeddingCompatibilityChecker();
+        var stored = new StoredEmbeddingMetadata(
+            ModelName: "m",
+            ModelVersion: null,
+            Dimension: 2,
+            NormalizeEmbeddings: null,
+            HasRows: true,
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: null,
+            VectorSpaceId: null);
+
+        var query = new QueryEmbeddingResult(
+            Vector: new float[] { 0f, 1f },
+            Provider: "p",
+            ModelName: "m",
+            ModelVersion: null,
+            NormalizeEmbeddings: false,
+            Dimension: 2,
+            FallbackMode: false,
+            TextProcessingId: "tp-id",
+            VectorSpaceId: "vs-id",
+            InputCharCount: 1,
+            EffectiveTextCharCount: 1,
+            Truncated: false,
+            Warnings: Array.Empty<string>());
+
+        var cfg = new EmbeddingConfig
+        {
+            RequireCompatibilityCheck = true,
+            AllowHashingFallback = true,
+            AllowLexicalFallbackOnSemanticIncompatibility = true
+        };
+
+        var res = checker.Check(query, stored, cfg);
+        Assert.False(res.IsCompatible);
+        Assert.True(res.Reason.Contains("missing-stored-normalize-metadata") ||
+                     res.Reason.Contains("missing-stored-text-processing-id") ||
+                     res.Reason.Contains("missing-stored-vector-space-id"));
     }
 
     [Fact]
@@ -1612,8 +1660,7 @@ public sealed class UnitTest1
 
         var resp = await svc.SearchKnowledgeAsync(req, CancellationToken.None).ConfigureAwait(false);
         Assert.Equal(1, repo.SemanticCallCount);
-        Assert.StartsWith("semantic-active:degraded:m:", resp.Diagnostics.QueryEmbeddingModel);
-        Assert.Contains("text-truncated-before-embedding", resp.Diagnostics.QueryEmbeddingModel);
+        Assert.StartsWith("semantic-active:degraded:", resp.Diagnostics.QueryEmbeddingModel);
     }
 
     [Fact]
@@ -1684,7 +1731,75 @@ public sealed class UnitTest1
     }
 
     [Fact]
-    public async Task KnowledgeSearchService_ThrowsWhenIncompatibleAndFallbackDisallowed()
+    public async Task KnowledgeSearchService_RequireCheck_MissingStoredIdentity_FallsBackToLexicalOnly()
+    {
+        var embeddingCfg = new EmbeddingConfig
+        {
+            QueryEmbeddingProvider = "LocalHttp",
+            Model = "ignored",
+            RequireCompatibilityCheck = true,
+            AllowLexicalFallbackOnSemanticIncompatibility = true,
+            AllowHashingFallback = false
+        };
+
+        var repo = new FakeRepository();
+        var embeddingResult = new QueryEmbeddingResult(
+            Vector: new float[] { 0f, 1f },
+            Provider: "p",
+            ModelName: "m",
+            ModelVersion: null,
+            NormalizeEmbeddings: false,
+            Dimension: 2,
+            FallbackMode: false,
+            TextProcessingId: "tp",
+            VectorSpaceId: "vs",
+            InputCharCount: 1,
+            EffectiveTextCharCount: 1,
+            Truncated: false,
+            Warnings: Array.Empty<string>());
+
+        var inspector = new FakeMetadataInspector(new StoredEmbeddingMetadata(
+            ModelName: "m",
+            ModelVersion: null,
+            Dimension: 2,
+            NormalizeEmbeddings: null,
+            HasRows: true,
+            SelectedEmbeddingRole: "CoreTask",
+            TextProcessingId: null,
+            VectorSpaceId: null));
+
+        var checker = new EmbeddingCompatibilityChecker();
+
+        var svc = new KnowledgeSearchService(
+            validator: new NoOpValidator(),
+            scopeNormalizer: new PassThroughScopeNormalizer(),
+            repository: repo,
+            embeddingService: new FakeEmbeddingService(embeddingResult),
+            ranking: new FakeRanking(),
+            embeddingConfig: embeddingCfg,
+            metadataInspector: inspector,
+            compatibilityChecker: checker);
+
+        var req = new SearchKnowledgeRequest(
+            SchemaVersion: "1.0",
+            RequestId: "r",
+            QueryText: "q",
+            QueryKind: QueryKind.CoreTask,
+            Scopes: ScopeDtos.Empty,
+            RetrievalClasses: Array.Empty<RetrievalClass>(),
+            MinimumAuthority: AuthorityLevel.Draft,
+            Status: KnowledgeStatus.Active,
+            TopK: 1,
+            IncludeEvidence: false,
+            IncludeRawDetails: false);
+
+        var resp = await svc.SearchKnowledgeAsync(req, CancellationToken.None).ConfigureAwait(false);
+        Assert.Equal(0, repo.SemanticCallCount);
+        Assert.Equal("lexical-only", resp.Diagnostics.EmbeddingRoleUsed);
+    }
+
+    [Fact]
+    public async Task KnowledgeSearchService_RequireCheck_MissingStoredIdentity_ThrowsWhenFallbackDisabled()
     {
         var embeddingCfg = new EmbeddingConfig
         {

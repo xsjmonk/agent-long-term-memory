@@ -57,7 +57,7 @@ public class SkillDrivenFlowTests : IDisposable
     [Fact]
     public void McpSkill_RequiresExactToolCall()
     {
-        var rulePath = GetRulePath("03-harness-mcp-tool-calling.mdc");
+        var rulePath = GetRulePath("03-harness-mcp-stage.mdc");
         var ruleContent = File.ReadAllText(rulePath);
         ruleContent.Should().Contain("nextAction");
         ruleContent.Should().Contain("EXACTLY");

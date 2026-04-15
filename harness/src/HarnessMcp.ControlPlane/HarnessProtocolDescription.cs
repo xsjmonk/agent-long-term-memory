@@ -7,6 +7,21 @@ public class HarnessProtocolDescription
     [JsonPropertyName("schemaVersion")]
     public string SchemaVersion { get; set; } = "1.0";
 
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = "Harness Control Plane Protocol - agent-driven planning flow with strict stage validation";
+
+    [JsonPropertyName("harnessMode")]
+    public string HarnessMode { get; set; } = "control-plane-only";
+
+    [JsonPropertyName("notes")]
+    public List<string> Notes { get; set; } = new()
+    {
+        "Harness is control-plane only and does NOT call LLM APIs",
+        "Harness does NOT call MCP tools directly - agent calls MCP only when harness instructs at MCP stage",
+        "Wrapper is the single supported entrypoint: Scripts\\invoke-harness-control-plane.ps1",
+        "Agent must submit every artifact back to harness before continuing to next stage"
+    };
+
     [JsonPropertyName("commands")]
     public List<CommandDescription> Commands { get; set; } = new()
     {

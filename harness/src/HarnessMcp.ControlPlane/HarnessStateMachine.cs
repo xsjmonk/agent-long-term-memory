@@ -349,12 +349,15 @@ public class HarnessStateMachine
                         ["schemaVersion"] = "1.0",
                         ["requestId"] = session.SessionId + "-retrieve",
                         ["taskId"] = session.TaskId,
-                        ["active_only"] = true,
-                        ["minimum_authority"] = "reviewed",
-                        ["max_items_per_chunk"] = 5,
-                        ["require_type_separation"] = true,
                         ["requirementIntent"] = session.AcceptedRequirementIntent,
-                        ["retrievalChunks"] = session.AcceptedRetrievalChunkSet
+                        ["retrievalChunks"] = session.AcceptedRetrievalChunkSet,
+                        ["search_profile"] = new Dictionary<string, object?>
+                        {
+                            ["active_only"] = true,
+                            ["minimum_authority"] = "reviewed",
+                            ["max_items_per_chunk"] = 5,
+                            ["require_type_separation"] = true
+                        }
                     }
                 }
             ),

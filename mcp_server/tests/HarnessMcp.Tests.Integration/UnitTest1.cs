@@ -709,7 +709,7 @@ public sealed class UnitTest1
                 RiskSignals: new[] { "placement consistency", "async refresh" },
                 Complexity: "medium");
 
-            var queryText = JsonSerializer.Serialize(shape, AppJsonSerializerContext.Default.SimilarCaseShapeDto);
+            var queryText = "ui-only card refresh with no engine change and placement consistency risk";
 
             var req = new SearchKnowledgeRequest(
                 SchemaVersion: "1.0",

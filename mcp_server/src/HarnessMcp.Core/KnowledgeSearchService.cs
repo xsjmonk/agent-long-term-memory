@@ -88,13 +88,26 @@ public sealed class KnowledgeSearchService(
 
     private static string ToLexicalOnlyDiag(string compatibilityReason)
     {
-        // compatibilityReason is expected to be like: "incompatible:<reason>"
         if (compatibilityReason.Contains("hashing-fallback-disallowed", StringComparison.OrdinalIgnoreCase))
             return "lexical-only:fallback:hashing-fallback-disallowed";
+        if (compatibilityReason.Contains("missing-stored-metadata", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:missing-stored-metadata";
+        if (compatibilityReason.Contains("missing-stored-model-name", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:missing-stored-model-name";
+        if (compatibilityReason.Contains("missing-stored-normalize-metadata", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:missing-stored-normalize-metadata";
+        if (compatibilityReason.Contains("missing-stored-text-processing-id", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:missing-stored-text-processing-id";
+        if (compatibilityReason.Contains("missing-stored-vector-space-id", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:missing-stored-vector-space-id";
         if (compatibilityReason.Contains("model-mismatch", StringComparison.OrdinalIgnoreCase))
             return "lexical-only:fallback:model-mismatch";
+        if (compatibilityReason.Contains("model-version-mismatch", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:model-version-mismatch";
         if (compatibilityReason.Contains("dimension-mismatch", StringComparison.OrdinalIgnoreCase))
             return "lexical-only:fallback:dimension-mismatch";
+        if (compatibilityReason.Contains("normalize-mismatch", StringComparison.OrdinalIgnoreCase))
+            return "lexical-only:fallback:normalize-mismatch";
         if (compatibilityReason.Contains("text-processing-mismatch", StringComparison.OrdinalIgnoreCase))
             return "lexical-only:fallback:text-processing-mismatch";
         if (compatibilityReason.Contains("vector-space-mismatch", StringComparison.OrdinalIgnoreCase))

@@ -133,7 +133,7 @@ public class SkillAndHarnessFlowTests : IDisposable
             ""merged"": {
                 ""decisions"": [],
                 ""constraints"": [],
-                ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [], ""supported_by_chunk_types"": [], ""merge_rationales"": [] }],
+                ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant to task""] }],
                 ""anti_patterns"": [],
                 ""similar_cases"": [],
                 ""references"": [],
@@ -211,6 +211,29 @@ public class SkillAndHarnessFlowTests : IDisposable
 
         attempt.Success.Should().BeFalse();
         attempt.Stage.Should().Be("error");
+    }
+
+    [Fact]
+    public void SkillAndHarness_HappyPath_ThroughPlanningStages()
+    {
+        var r0 = StartSession("Add feature");
+        r0.SessionId.Should().NotBeNullOrEmpty();
+        r0.Stage.Should().Be("need_requirement_intent");
+
+        var r1 = SubmitRequirementIntent(r0.SessionId);
+        r1.Success.Should().BeTrue();
+        r1.Stage.Should().Be("need_retrieval_chunk_set");
+
+        var r2 = SubmitRetrievalChunkSet(r0.SessionId);
+        r2.Success.Should().BeTrue();
+        r2.Stage.Should().Be("need_retrieval_chunk_validation");
+
+        var r3 = SubmitChunkQualityReport(r0.SessionId);
+        r3.Success.Should().BeTrue();
+        r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
+
+        var r4 = SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
+        r4.Stage.Should().BeOneOf("need_mcp_merge_retrieval_results", "error");
     }
 
     [Fact]

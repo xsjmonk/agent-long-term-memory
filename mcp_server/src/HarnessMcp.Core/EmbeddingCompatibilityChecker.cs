@@ -11,13 +11,13 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
         Contracts.EmbeddingConfig config)
     {
         var allowLexicalFallback = config.AllowLexicalFallbackOnSemanticIncompatibility;
+        var requireCheck = config.RequireCompatibilityCheck;
         var degradationSignals = new List<string>(capacity: 4);
 
         static IReadOnlyList<string> EmptySignals() => Array.Empty<string>();
 
         void AddDegradation(string signal) => degradationSignals.Add(signal);
 
-        // ---- Hard compatibility blockers ----
         if (query.Vector.IsEmpty || query.Dimension <= 0)
             return new EmbeddingCompatibilityResult(
                 IsCompatible: false,
@@ -36,25 +36,24 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
 
         if (stored is null || !stored.HasRows)
         {
-            if (!config.RequireCompatibilityCheck)
+            if (!requireCheck)
             {
-                // No hard metadata check, but we still allow degradation to be surfaced.
-                var noMetadataIncompatibilityReason = CollectDegradationSignals(query, stored, config, AddDegradation);
-                if (noMetadataIncompatibilityReason is not null)
+                CollectBuilderDegradationSignals(query, AddDegradation);
+                
+                if (degradationSignals.Count > 0)
                     return new EmbeddingCompatibilityResult(
-                        IsCompatible: false,
+                        IsCompatible: true,
                         AllowLexicalFallback: allowLexicalFallback,
-                        SemanticQualityDegraded: false,
-                        Reason: noMetadataIncompatibilityReason,
-                        DegradationSignals: EmptySignals());
+                        SemanticQualityDegraded: true,
+                        Reason: "compatible:degraded:missing-stored-metadata",
+                        DegradationSignals: degradationSignals.ToArray());
 
-                var degraded = degradationSignals.Count > 0;
                 return new EmbeddingCompatibilityResult(
                     IsCompatible: true,
                     AllowLexicalFallback: allowLexicalFallback,
-                    SemanticQualityDegraded: degraded,
-                    Reason: degraded ? "compatible:degraded:missing-stored-metadata" : "compatible:missing-stored-metadata-but-check-disabled",
-                    DegradationSignals: degradationSignals.ToArray());
+                    SemanticQualityDegraded: false,
+                    Reason: "compatible:missing-stored-metadata-but-check-disabled",
+                    DegradationSignals: EmptySignals());
             }
 
             return new EmbeddingCompatibilityResult(
@@ -65,13 +64,34 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
                 DegradationSignals: EmptySignals());
         }
 
+        if (requireCheck)
+            return CheckWithRequiredCompatibility(query, stored, allowLexicalFallback, degradationSignals, AddDegradation);
+
+        return CheckWithoutRequiredCompatibility(query, stored, allowLexicalFallback, degradationSignals, AddDegradation);
+    }
+
+    private static EmbeddingCompatibilityResult CheckWithRequiredCompatibility(
+        QueryEmbeddingResult query,
+        StoredEmbeddingMetadata stored,
+        bool allowLexicalFallback,
+        List<string> degradationSignals,
+        Action<string> addDegradation)
+    {
         if (stored.Dimension != query.Dimension)
             return new EmbeddingCompatibilityResult(
                 IsCompatible: false,
                 AllowLexicalFallback: allowLexicalFallback,
                 SemanticQualityDegraded: false,
                 Reason: $"incompatible:dimension-mismatch:db={stored.Dimension} query={query.Dimension}",
-                DegradationSignals: EmptySignals());
+                DegradationSignals: Array.Empty<string>());
+
+        if (string.IsNullOrWhiteSpace(stored.ModelName))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:missing-stored-model-name",
+                DegradationSignals: Array.Empty<string>());
 
         if (!string.Equals(stored.ModelName, query.ModelName, StringComparison.OrdinalIgnoreCase))
             return new EmbeddingCompatibilityResult(
@@ -79,7 +99,7 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
                 AllowLexicalFallback: allowLexicalFallback,
                 SemanticQualityDegraded: false,
                 Reason: $"incompatible:model-mismatch:db={stored.ModelName} query={query.ModelName}",
-                DegradationSignals: EmptySignals());
+                DegradationSignals: Array.Empty<string>());
 
         if (stored.ModelVersion is not null && query.ModelVersion is not null &&
             !string.Equals(stored.ModelVersion, query.ModelVersion, StringComparison.OrdinalIgnoreCase))
@@ -89,43 +109,134 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
                 AllowLexicalFallback: allowLexicalFallback,
                 SemanticQualityDegraded: false,
                 Reason: $"incompatible:model-version-mismatch:db={stored.ModelVersion} query={query.ModelVersion}",
-                DegradationSignals: EmptySignals());
+                DegradationSignals: Array.Empty<string>());
         }
 
-        if (stored.NormalizeEmbeddings is bool dbNorm && !query.NormalizeEmbeddings.Equals(dbNorm))
+        if (!stored.NormalizeEmbeddings.HasValue)
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:missing-stored-normalize-metadata",
+                DegradationSignals: Array.Empty<string>());
+
+        if (query.NormalizeEmbeddings != stored.NormalizeEmbeddings.Value)
             return new EmbeddingCompatibilityResult(
                 IsCompatible: false,
                 AllowLexicalFallback: allowLexicalFallback,
                 SemanticQualityDegraded: false,
                 Reason: "incompatible:normalize-mismatch",
-                DegradationSignals: EmptySignals());
+                DegradationSignals: Array.Empty<string>());
 
-        // ---- Semantic-quality degradation signals (non-blocking) ----
-        var incompatibilityReason = CollectDegradationSignals(query, stored, config, AddDegradation);
-        if (incompatibilityReason is not null)
+        if (string.IsNullOrWhiteSpace(stored.TextProcessingId))
             return new EmbeddingCompatibilityResult(
                 IsCompatible: false,
                 AllowLexicalFallback: allowLexicalFallback,
                 SemanticQualityDegraded: false,
-                Reason: incompatibilityReason,
-                DegradationSignals: EmptySignals());
+                Reason: "incompatible:missing-stored-text-processing-id",
+                DegradationSignals: Array.Empty<string>());
 
-        var semanticQualityDegraded = degradationSignals.Count > 0;
+        if (!string.Equals(stored.TextProcessingId, query.TextProcessingId, StringComparison.OrdinalIgnoreCase))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:text-processing-mismatch",
+                DegradationSignals: Array.Empty<string>());
+
+        if (string.IsNullOrWhiteSpace(stored.VectorSpaceId))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:missing-stored-vector-space-id",
+                DegradationSignals: Array.Empty<string>());
+
+        if (!string.Equals(stored.VectorSpaceId, query.VectorSpaceId, StringComparison.OrdinalIgnoreCase))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:vector-space-mismatch",
+                DegradationSignals: Array.Empty<string>());
+
+        CollectBuilderDegradationSignals(query, addDegradation);
+
+        var hasDegradation = degradationSignals.Count > 0;
 
         return new EmbeddingCompatibilityResult(
             IsCompatible: true,
             AllowLexicalFallback: allowLexicalFallback,
-            SemanticQualityDegraded: semanticQualityDegraded,
-            Reason: semanticQualityDegraded
+            SemanticQualityDegraded: hasDegradation,
+            Reason: hasDegradation
                 ? $"compatible:stored-role={stored.SelectedEmbeddingRole}:compatible:degraded"
                 : $"compatible:stored-role={stored.SelectedEmbeddingRole}",
-            DegradationSignals: degradationSignals.ToArray());
+            DegradationSignals: hasDegradation ? degradationSignals.ToArray() : Array.Empty<string>());
     }
 
-    private static string? CollectDegradationSignals(
+    private static EmbeddingCompatibilityResult CheckWithoutRequiredCompatibility(
         QueryEmbeddingResult query,
-        StoredEmbeddingMetadata? stored,
-        Contracts.EmbeddingConfig config,
+        StoredEmbeddingMetadata stored,
+        bool allowLexicalFallback,
+        List<string> degradationSignals,
+        Action<string> addDegradation)
+    {
+        if (stored.Dimension != query.Dimension)
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: $"incompatible:dimension-mismatch:db={stored.Dimension} query={query.Dimension}",
+                DegradationSignals: Array.Empty<string>());
+
+        if (string.IsNullOrWhiteSpace(stored.ModelName))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: "incompatible:missing-stored-model-name",
+                DegradationSignals: Array.Empty<string>());
+
+        if (!string.Equals(stored.ModelName, query.ModelName, StringComparison.OrdinalIgnoreCase))
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: $"incompatible:model-mismatch:db={stored.ModelName} query={query.ModelName}",
+                DegradationSignals: Array.Empty<string>());
+
+        if (stored.ModelVersion is not null && query.ModelVersion is not null &&
+            !string.Equals(stored.ModelVersion, query.ModelVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return new EmbeddingCompatibilityResult(
+                IsCompatible: false,
+                AllowLexicalFallback: allowLexicalFallback,
+                SemanticQualityDegraded: false,
+                Reason: $"incompatible:model-version-mismatch:db={stored.ModelVersion} query={query.ModelVersion}",
+                DegradationSignals: Array.Empty<string>());
+        }
+
+        CollectDegradationSignalsWhenCheckDisabled(query, stored, addDegradation);
+
+        var hasDegradation = degradationSignals.Count > 0;
+
+        return new EmbeddingCompatibilityResult(
+            IsCompatible: true,
+            AllowLexicalFallback: allowLexicalFallback,
+            SemanticQualityDegraded: hasDegradation,
+            Reason: hasDegradation
+                ? $"compatible:degraded:stored-role={stored.SelectedEmbeddingRole}"
+                : $"compatible:stored-role={stored.SelectedEmbeddingRole}",
+            DegradationSignals: hasDegradation ? degradationSignals.ToArray() : Array.Empty<string>());
+    }
+
+    private static bool HasBuilderDegradationSignals(QueryEmbeddingResult query)
+    {
+        return query.Truncated || query.Warnings.Count > 0;
+    }
+
+    private static void CollectBuilderDegradationSignals(
+        QueryEmbeddingResult query,
         Action<string> addDegradation)
     {
         if (query.Truncated)
@@ -134,15 +245,19 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
         if (query.Warnings.Count > 0)
         {
             var first = query.Warnings[0];
-            var isHashingFallback = first.Contains("hashing", StringComparison.OrdinalIgnoreCase) &&
-                                    first.Contains("fallback", StringComparison.OrdinalIgnoreCase);
-            addDegradation(isHashingFallback ? "builder-warning:hashing-fallback-active" : "builder-warning:builder-warning");
+            var isHashing = first.Contains("hashing", StringComparison.OrdinalIgnoreCase) &&
+                                first.Contains("fallback", StringComparison.OrdinalIgnoreCase);
+            addDegradation(isHashing ? "builder-warning:hashing-fallback-active" : "builder-warning:builder-warning");
         }
+    }
 
-        if (stored is null)
-            return null;
+    private static void CollectDegradationSignalsWhenCheckDisabled(
+        QueryEmbeddingResult query,
+        StoredEmbeddingMetadata stored,
+        Action<string> addDegradation)
+    {
+        CollectBuilderDegradationSignals(query, addDegradation);
 
-        // Missing stored identity fields -> degradation signals
         if (!stored.NormalizeEmbeddings.HasValue)
             addDegradation("missing-stored-normalize-metadata");
 
@@ -152,21 +267,12 @@ public sealed class EmbeddingCompatibilityChecker : IEmbeddingCompatibilityCheck
         if (string.IsNullOrWhiteSpace(stored.VectorSpaceId))
             addDegradation("missing-stored-vector-space-id");
 
-        // Compare text_processing_id only when stored metadata provides it
         if (!string.IsNullOrWhiteSpace(stored.TextProcessingId) &&
             !string.Equals(stored.TextProcessingId, query.TextProcessingId, StringComparison.OrdinalIgnoreCase))
-        {
             addDegradation("text-processing-mismatch");
-        }
 
-        // Compare vector_space_id only when stored metadata provides it
         if (!string.IsNullOrWhiteSpace(stored.VectorSpaceId) &&
             !string.Equals(stored.VectorSpaceId, query.VectorSpaceId, StringComparison.OrdinalIgnoreCase))
-        {
             addDegradation("vector-space-mismatch");
-        }
-
-        return null;
     }
 }
-
