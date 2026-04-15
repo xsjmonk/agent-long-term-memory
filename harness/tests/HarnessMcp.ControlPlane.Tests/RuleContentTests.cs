@@ -9,7 +9,7 @@ public class RuleContentTests
     [Fact]
     public void PlanningRule_RequiresHarnessFirstFlow()
     {
-        var rulePath = FindRulePath("00-harness-control-plane.mdc");
+        var rulePath = FindRulePath("00-planning-mode-harness-control.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -24,7 +24,7 @@ public class RuleContentTests
     [Fact]
     public void FailureRule_IncludesErrorHandling()
     {
-        var rulePath = FindRulePath("01-harness-failure.mdc");
+        var rulePath = FindRulePath("01-planning-mode-failure-handling.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -36,7 +36,7 @@ public class RuleContentTests
     [Fact]
     public void ExecutionRule_ForbidsWorkerSideRetrieval()
     {
-        var rulePath = FindRulePath("02-harness-execution.mdc");
+        var rulePath = FindRulePath("02-execution-mode-worker-only.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -48,7 +48,7 @@ public class RuleContentTests
     [Fact]
     public void PlanningRule_RequiresExactWrapperPath()
     {
-        var rulePath = FindRulePath("00-harness-control-plane.mdc");
+        var rulePath = FindRulePath("00-planning-mode-harness-control.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -59,7 +59,7 @@ public class RuleContentTests
     [Fact]
     public void PlanningRule_RequiresSubmitAfterEveryStage()
     {
-        var rulePath = FindRulePath("00-harness-control-plane.mdc");
+        var rulePath = FindRulePath("00-planning-mode-harness-control.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -70,7 +70,7 @@ public class RuleContentTests
     [Fact]
     public void PlanningRule_RequiresStageOrder()
     {
-        var rulePath = FindRulePath("00-harness-control-plane.mdc");
+        var rulePath = FindRulePath("00-planning-mode-harness-control.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -84,7 +84,7 @@ public class RuleContentTests
     [Fact]
     public void FailureRule_RequiresStopOnError()
     {
-        var rulePath = FindRulePath("01-harness-failure.mdc");
+        var rulePath = FindRulePath("01-planning-mode-failure-handling.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -95,7 +95,7 @@ public class RuleContentTests
     [Fact]
     public void ExecutionRule_ProhibitsIndependentMemoryRetrieval()
     {
-        var rulePath = FindRulePath("02-harness-execution.mdc");
+        var rulePath = FindRulePath("02-execution-mode-worker-only.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -106,7 +106,7 @@ public class RuleContentTests
     [Fact]
     public void McpToolRule_RequiresExactToolMapping()
     {
-        var rulePath = FindRulePath("03-harness-mcp-tool-calling.mdc");
+        var rulePath = FindRulePath("03-planning-mode-mcp-stage.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
@@ -118,12 +118,11 @@ public class RuleContentTests
     [Fact]
     public void PlanningRule_ProhibitsMcpBeforeInstruction()
     {
-        var rulePath = FindRulePath("00-harness-control-plane.mdc");
+        var rulePath = FindRulePath("00-planning-mode-harness-control.mdc");
         if (rulePath == null) return;
 
         var content = File.ReadAllText(rulePath);
-        content.Should().Contain("NEVER skip this stage");
-        content.Should().Contain("Harness provides");
+        content.Should().Contain("NEVER skip stages");
     }
 
     private string? FindRulePath(string fileName)

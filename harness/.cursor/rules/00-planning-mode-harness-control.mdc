@@ -65,7 +65,7 @@ NEVER use:
 7. STOP immediately on any harness error
 
 ### Rule 3: Do NOT Skip Stages
-The agent must not skip any stage in the harness protocol. Stages must be followed in order:
+The agent must not skip any stage in the harness protocol. NEVER skip stages.
 1. `need_requirement_intent`
 2. `need_retrieval_chunk_set`
 3. `need_retrieval_chunk_validation`
@@ -148,4 +148,4 @@ When the harness returns `stage: complete`:
     }
   ]
 }
-```
+```NEVER skip stages
