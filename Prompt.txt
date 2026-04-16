@@ -1,0 +1,38 @@
+I run claude agent in `C:\Docs\Repo\github\pipesim\pip-pipesim\Stingray\`. It does not see harness control flow at all. Fix it
+
+The agent gets this error
+```
+Session went into error state. Since I'm having trouble with the harness schema requirements and the planning is taking longer than needed, let me provide you with a direct plan based on my analysis of the code. I'll write the plan directly in the designated folder:
+```
+
+Mostly it is missing scheme for retrieval chunk set. 
+
+Do this way to give a fix. Assume you are a planner agent in `C:\Docs\Repo\github\pipesim\pip-pipesim\Stingray\`. You will do the harness control planning. You read all skills and call harness for the flow
+
+The planner agent plans this:
+```
+You are in plan mode. All plans should be written to this folder: `C:\Users\SXu12\OneDrive - SLB\AI_plan\1803343\hackthon2026\`. Give a meaningful name of the plan and it should start with an index in two digits.
+
+1. Change the fluid name
+2. Switch tab to trigger the change.
+3. The name is changed and in the tree dialog, the relevant fluid name is changed. 
+4. In reservoir mapping dialog, the grid shows fluid name. But this fluid name does not change. This is wrong
+
+Plan
+5. Check why reservoir mapping dialog does not get the change. Plan a fix for it
+6. Check this change. You should follow the same pattern as this change. https://dev.azure.com/slb-swt/Flow_Assurance/_git/pip-pipesim/commit/666fb42c89184768cc2c2ea994bfcb2204dd1689
+
+Plan the change and tests
+```
+
+In the harness control, planner agent will find bugs and be blocked. Now a bug fixing agent can fix them in `c:\Docs\Hackthon\2026\harness\`. 
+When planner agent gets any problem with scheme things, the bug fixing agent should fix it.
+
+Then continue your planner agent to continue the flow until the plan is made
+
+Additional information: 
+mcp server is `http://127.0.0.1:5081/`
+`c:\Docs\Hackthon\2026\mcp_server\Scripts\test_mcp_tools.ps1` can give you infromation how to call mcp server.
+
+An agent does not know how to call it. You should create skills for this to guide how to use each tool with all details.
+
