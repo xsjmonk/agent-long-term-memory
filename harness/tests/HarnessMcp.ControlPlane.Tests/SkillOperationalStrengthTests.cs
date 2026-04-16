@@ -382,7 +382,7 @@ public class SkillOperationalStrengthTests
     {
         var root = FindHarnessRoot() ?? throw new DirectoryNotFoundException(
             "Could not locate harness repository root.");
-        var path = Path.Combine(root, ".cursor", "rules", fileName);
+        var path = Path.Combine(root, "agent-rules", fileName);
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"Required skill file '{fileName}' not found at: {path}\n" +

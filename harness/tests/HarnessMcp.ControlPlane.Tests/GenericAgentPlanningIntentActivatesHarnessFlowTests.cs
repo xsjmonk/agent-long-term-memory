@@ -199,7 +199,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
     private string ReadSkillOrFail()
     {
         var root = FindHarnessRoot() ?? throw new DirectoryNotFoundException("Could not locate harness root.");
-        var path = Path.Combine(root, ".cursor", "rules", ActivationSkillFile);
+        var path = Path.Combine(root, "agent-rules", ActivationSkillFile);
         if (!File.Exists(path))
             throw new FileNotFoundException($"Activation skill not found at: {path}");
         return File.ReadAllText(path);

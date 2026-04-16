@@ -312,7 +312,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
     private string ReadSkillOrFail()
     {
         var root = FindHarnessRoot() ?? throw new DirectoryNotFoundException("Could not locate harness root.");
-        var path = Path.Combine(root, ".cursor", "rules", McpSkillFile);
+        var path = Path.Combine(root, "agent-rules", McpSkillFile);
         if (!File.Exists(path))
             throw new FileNotFoundException($"MCP skill not found at: {path}");
         return File.ReadAllText(path);

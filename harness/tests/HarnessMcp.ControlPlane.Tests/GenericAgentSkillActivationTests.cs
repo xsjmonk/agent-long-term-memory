@@ -240,7 +240,7 @@ public class GenericAgentSkillActivationTests
     {
         var root = FindHarnessRoot() ?? throw new DirectoryNotFoundException(
             "Could not locate harness repository root.");
-        return Path.Combine(root, ".cursor", "rules", fileName);
+        return Path.Combine(root, "agent-rules", fileName);
     }
 
     private static string? FindHarnessRoot()

@@ -37,7 +37,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
     private static string ReadRuleOrFail(string fileName)
     {
         var harnessRoot = FindHarnessRootOrFail();
-        var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+        var path = Path.Combine(harnessRoot, "agent-rules", fileName);
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"Required canonical rule file '{fileName}' not found at: {path}");

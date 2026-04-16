@@ -48,7 +48,7 @@ public class HardStopAndLoopTests : IDisposable
 
         foreach (var fileName in canonicalFiles)
         {
-            var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+            var path = Path.Combine(harnessRoot, "agent-rules", fileName);
             File.Exists(path).Should().BeTrue($"canonical rule file '{fileName}' must exist");
         }
     }
@@ -67,7 +67,7 @@ public class HardStopAndLoopTests : IDisposable
 
         foreach (var fileName in staleFiles)
         {
-            var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+            var path = Path.Combine(harnessRoot, "agent-rules", fileName);
             File.Exists(path).Should().BeFalse(
                 $"stale rule file '{fileName}' must be removed — canonical names must be used exclusively");
         }

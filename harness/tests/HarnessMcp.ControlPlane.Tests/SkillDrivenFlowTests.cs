@@ -31,7 +31,7 @@ public class SkillDrivenFlowTests : IDisposable
         var dir = AppContext.BaseDirectory;
         while (dir != null)
         {
-            var candidate = Path.Combine(dir, ".cursor", "rules", ruleName);
+            var candidate = Path.Combine(dir, "agent-rules", ruleName);
             if (File.Exists(candidate))
                 return candidate;
             var parent = Directory.GetParent(dir);

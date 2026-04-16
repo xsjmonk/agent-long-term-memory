@@ -37,7 +37,7 @@ public class RuleContentTests
         var harnessRoot = GetHarnessRootOrFail();
         foreach (var fileName in CanonicalRuleFiles)
         {
-            var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+            var path = Path.Combine(harnessRoot, "agent-rules", fileName);
             File.Exists(path).Should().BeTrue(
                 $"canonical rule file '{fileName}' must exist at .cursor/rules/{fileName}");
         }
@@ -49,7 +49,7 @@ public class RuleContentTests
         var harnessRoot = GetHarnessRootOrFail();
         foreach (var fileName in StaleRuleFiles)
         {
-            var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+            var path = Path.Combine(harnessRoot, "agent-rules", fileName);
             File.Exists(path).Should().BeFalse(
                 $"stale rule file '{fileName}' must be removed — use canonical names only");
         }
@@ -442,7 +442,7 @@ public class RuleContentTests
     private static string GetRulePathOrFail(string fileName)
     {
         var harnessRoot = GetHarnessRootOrFail();
-        var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+        var path = Path.Combine(harnessRoot, "agent-rules", fileName);
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"Required canonical rule file '{fileName}' not found at: {path}\n" +

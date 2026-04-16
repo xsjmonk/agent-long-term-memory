@@ -294,7 +294,7 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
     private string ReadSkillOrFail()
     {
         var root = FindHarnessRoot() ?? throw new DirectoryNotFoundException("Could not locate harness root.");
-        var path = Path.Combine(root, ".cursor", "rules", PlanningSkillFile);
+        var path = Path.Combine(root, "agent-rules", PlanningSkillFile);
         if (!File.Exists(path))
             throw new FileNotFoundException($"Planning skill not found at: {path}");
         return File.ReadAllText(path);

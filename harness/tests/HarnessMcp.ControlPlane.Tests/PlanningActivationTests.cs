@@ -159,7 +159,7 @@ public class PlanningActivationTests
     private static string GetRulePathOrFail(string fileName)
     {
         var harnessRoot = GetHarnessRootOrFail();
-        var path = Path.Combine(harnessRoot, ".cursor", "rules", fileName);
+        var path = Path.Combine(harnessRoot, "agent-rules", fileName);
         if (!File.Exists(path))
             throw new FileNotFoundException(
                 $"Required canonical rule file '{fileName}' not found at: {path}\n" +
