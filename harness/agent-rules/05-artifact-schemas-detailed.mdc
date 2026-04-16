@@ -1,0 +1,862 @@
+---
+description: Detailed artifact schemas for all harness planning stages. Complete JSON structures with all required fields, field-by-field explanations, concrete examples, and common mistakes. This skill exists because Cursor and other agents struggle with incomplete schema documentation.
+globs:
+alwaysApply: true
+---
+
+# Detailed Artifact Schemas — Complete Reference
+
+This skill provides **complete, correct, detailed schemas** for every artifact the agent must generate during harness planning. Use these schemas exactly.
+
+---
+
+## CRITICAL RULES FOR ALL SCHEMAS
+
+1. **Use snake_case for all JSON field names** — `task_id`, NOT `taskId`
+2. **Include ALL required fields** — missing fields cause harness rejection
+3. **Use exact enum values** — if the schema says `"low|medium|high"`, use exactly one of those strings
+4. **Write to disk first** — create the JSON file before calling `submit-step-result`
+5. **Never modify MCP responses** — submit raw, unmodified responses from MCP tools
+
+---
+
+## Stage 1: RequirementIntent
+
+**When:** Harness stage `need_requirement_intent`
+**Action:** `agent_generate_requirement_intent`
+**File:** `requirement_intent.json`
+
+### Complete Schema
+
+```json
+{
+  "task_id": "unique-identifier-for-this-task",
+  "task_type": "implementation|refactor|bugfix|feature|migration|debugging",
+  "goal": "Clear, concise statement of what the task achieves",
+  "hard_constraints": [
+    "Constraint 1: must not break existing API",
+    "Constraint 2: must complete by deadline"
+  ],
+  "risk_signals": [
+    "Risk 1: changes touch auth layer",
+    "Risk 2: requires database migration"
+  ],
+  "complexity": "low|medium|high"
+}
+```
+
+### Field Reference
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `task_id` | YES | string | Unique identifier; can be same as taskId from harness response |
+| `task_type` | YES | enum | One of: `implementation`, `refactor`, `bugfix`, `feature`, `migration`, `debugging` |
+| `goal` | YES | string | What the task achieves in 1–2 sentences. Be specific, not vague. |
+| `hard_constraints` | YES | array | List of immovable constraints. Can be empty `[]` if none exist. |
+| `risk_signals` | YES | array | List of identified risks. Can be empty `[]` if none exist. |
+| `complexity` | YES | enum | One of: `low`, `medium`, `high` — NOT `"low-complexity"` or other variants |
+
+### Example
+
+```json
+{
+  "task_id": "task-auth-001",
+  "task_type": "feature",
+  "goal": "Add JWT-based authentication with httpOnly cookies. Protect existing API routes without breaking client code.",
+  "hard_constraints": [
+    "Must use RS256 algorithm",
+    "Must not change existing API response shapes",
+    "Must achieve zero-downtime deployment"
+  ],
+  "risk_signals": [
+    "Token expiry could strand users mid-session",
+    "Session cookies vulnerable to CSRF if headers not set correctly",
+    "Middleware order critical — auth must run early but after request parsing"
+  ],
+  "complexity": "medium"
+}
+```
+
+### Submission Command
+
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_requirement_intent" `
+    -ArtifactType "RequirementIntent" `
+    -ArtifactFile "requirement_intent.json"
+```
+
+---
+
+## Stage 2: RetrievalChunkSet
+
+**When:** Harness stage `need_retrieval_chunk_set`
+**Action:** `agent_generate_retrieval_chunk_set`
+**File:** `retrieval_chunk_set.json`
+
+### Complete Schema
+
+```json
+{
+  "task_id": "same as in RequirementIntent",
+  "complexity": "low|medium|high (must match RequirementIntent)",
+  "chunks": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task|constraint|risk|pattern|similar_case",
+      "text": "Query text (required for all types EXCEPT similar_case when it has task_shape)"
+    }
+  ]
+}
+```
+
+### Field Reference
+
+| Field | Required | Notes |
+|---|---|---|
+| `task_id` | YES | Must match the task_id from RequirementIntent |
+| `complexity` | YES | Must match the complexity from RequirementIntent: `low`, `medium`, or `high` |
+| `chunks` | YES | Array of chunk objects; must follow coverage rules (see below) |
+| `chunks[].chunk_id` | YES | Unique identifier within this chunk set (e.g., `c1`, `c2`, `auth-constraint`, `db-pattern`) |
+| `chunks[].chunk_type` | YES | Exactly one of: `core_task`, `constraint`, `risk`, `pattern`, `similar_case` |
+| `chunks[].text` | CONDITIONAL | Required for `core_task`, `constraint`, `risk`, `pattern`. Optional for `similar_case` if it includes `task_shape` |
+| `chunks[].task_shape` | CONDITIONAL | REQUIRED for `similar_case` chunks. See below for structure. |
+
+### Coverage Rules (CRITICAL)
+
+**These rules are MANDATORY. Harness will reject your chunk set if you violate them:**
+
+1. **`core_task` chunk always required**
+   - Exactly one chunk with `chunk_type: "core_task"`
+   - Must have `text` field describing the core task
+
+2. **`constraint` chunk required IF `hard_constraints` is non-empty**
+   - If RequirementIntent has `hard_constraints`, you MUST include at least one chunk with `chunk_type: "constraint"`
+   - If RequirementIntent has NO hard constraints (empty array), you MAY omit constraint chunks
+
+3. **`risk` chunk required IF `risk_signals` is non-empty**
+   - If RequirementIntent has `risk_signals`, you MUST include at least one chunk with `chunk_type: "risk"`
+   - If RequirementIntent has NO risk signals (empty array), you MAY omit risk chunks
+
+4. **`pattern` chunk optional**
+   - Include pattern chunks to ask for architectural patterns, design patterns, or best practices
+   - Zero or more pattern chunks allowed
+
+5. **`similar_case` chunk required IF `complexity` is `medium` or `high`**
+   - If complexity is `low`, you MAY omit similar_case chunks
+   - If complexity is `medium` or `high`, you MUST include at least one chunk with `chunk_type: "similar_case"`
+   - Similar_case chunks MUST include `task_shape` object
+
+### `similar_case` Chunk with `task_shape` (CRITICAL FOR MEDIUM/HIGH COMPLEXITY)
+
+```json
+{
+  "chunk_id": "c_similar",
+  "chunk_type": "similar_case",
+  "task_shape": {
+    "task_type": "feature|refactor|bugfix|etc (must match or be similar to RequirementIntent.task_type)",
+    "complexity": "low|medium|high",
+    "involved_layers": ["presentation", "api", "database"],
+    "risk_level": "low|medium|high"
+  }
+}
+```
+
+**Notes on `task_shape`:**
+- `task_type` should describe the type of similar task you're looking for (can differ from RequirementIntent.task_type, but should be related)
+- `complexity` helps find similar-complexity tasks
+- `involved_layers` lists the architectural layers your task touches
+- `risk_level` helps find similarly-risky tasks
+- The `task_shape` tells the MCP tool what "similar" means for your task
+
+### Examples
+
+#### Example 1: Low Complexity Task (No similar_case Required)
+
+```json
+{
+  "task_id": "task-001",
+  "complexity": "low",
+  "chunks": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "text": "Add a new button to the user profile settings page that allows users to export their data as JSON"
+    },
+    {
+      "chunk_id": "c2",
+      "chunk_type": "pattern",
+      "text": "Find UI patterns for export functionality and download triggers"
+    }
+  ]
+}
+```
+
+**Why this is valid:**
+- Has `core_task` ✓
+- Has `pattern` (optional) ✓
+- Complexity is `low`, so NO `similar_case` required ✓
+- No hard_constraints, so NO `constraint` chunk required ✓
+- No risk_signals, so NO `risk` chunk required ✓
+
+#### Example 2: Medium Complexity with Constraints and Risks (REQUIRES similar_case)
+
+```json
+{
+  "task_id": "task-auth-001",
+  "complexity": "medium",
+  "chunks": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "text": "Add JWT-based authentication to protect existing API routes. Use RS256 algorithm with 24-hour token expiry. Implement httpOnly cookies for token storage."
+    },
+    {
+      "chunk_id": "c2",
+      "chunk_type": "constraint",
+      "text": "Must not break existing API response shapes. Must work with zero-downtime deployment. Tokens must use RS256, not HS256."
+    },
+    {
+      "chunk_id": "c3",
+      "chunk_type": "risk",
+      "text": "Session tokens vulnerable to CSRF if CSRF headers not set. Token expiry could strand users mid-session. Middleware order critical."
+    },
+    {
+      "chunk_id": "c4",
+      "chunk_type": "pattern",
+      "text": "Best practices for JWT implementation in Node.js/Express. How other services handle token refresh without breaking client code."
+    },
+    {
+      "chunk_id": "c5",
+      "chunk_type": "similar_case",
+      "task_shape": {
+        "task_type": "feature",
+        "complexity": "medium",
+        "involved_layers": ["api", "middleware", "auth"],
+        "risk_level": "medium"
+      }
+    }
+  ]
+}
+```
+
+**Why this is valid:**
+- Has `core_task` ✓
+- Has `constraint` (hard_constraints non-empty in RequirementIntent) ✓
+- Has `risk` (risk_signals non-empty in RequirementIntent) ✓
+- Has `pattern` (optional) ✓
+- Has `similar_case` with `task_shape` (complexity is `medium`) ✓
+
+#### Example 3: HIGH Complexity with Everything (REQUIRES similar_case with task_shape)
+
+```json
+{
+  "task_id": "task-db-migration-001",
+  "complexity": "high",
+  "chunks": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "text": "Migrate from MySQL 5.7 to PostgreSQL 15. Rewrite all queries to use PostgreSQL idioms. Maintain zero-downtime during migration. Handle ~5M existing users."
+    },
+    {
+      "chunk_id": "c2",
+      "chunk_type": "constraint",
+      "text": "Zero downtime required. Old and new database must coexist during migration. No breaking changes to existing API. Must handle concurrent reads/writes from old and new systems."
+    },
+    {
+      "chunk_id": "c3",
+      "chunk_type": "risk",
+      "text": "Data consistency risk if old/new dbs get out of sync. Performance regression if queries not optimized for PG. Client library incompatibilities (MySQL vs PG drivers)."
+    },
+    {
+      "chunk_id": "c4",
+      "chunk_type": "pattern",
+      "text": "Dual-write patterns for zero-downtime DB migrations. Query translation strategies from MySQL to PostgreSQL. Transaction isolation and consistency guarantees."
+    },
+    {
+      "chunk_id": "c5",
+      "chunk_type": "similar_case",
+      "task_shape": {
+        "task_type": "migration",
+        "complexity": "high",
+        "involved_layers": ["database", "api", "persistence"],
+        "risk_level": "high"
+      }
+    }
+  ]
+}
+```
+
+**Why this is valid:**
+- Has `core_task` ✓
+- Has `constraint` (hard_constraints non-empty) ✓
+- Has `risk` (risk_signals non-empty) ✓
+- Has `pattern` (optional) ✓
+- Has `similar_case` with `task_shape` (complexity is `high`) ✓
+
+### Submission Command
+
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_retrieval_chunk_set" `
+    -ArtifactType "RetrievalChunkSet" `
+    -ArtifactFile "retrieval_chunk_set.json"
+```
+
+### Common Mistakes (AVOID THESE)
+
+❌ **MISTAKE: Missing `task_shape` on `similar_case` chunk**
+```json
+{
+  "chunk_id": "c5",
+  "chunk_type": "similar_case",
+  "text": "Find similar tasks"  // ← WRONG: similar_case needs task_shape, not text
+}
+```
+**FIX:** Add `task_shape` object instead:
+```json
+{
+  "chunk_id": "c5",
+  "chunk_type": "similar_case",
+  "task_shape": { "task_type": "feature", "complexity": "medium", ... }
+}
+```
+
+❌ **MISTAKE: Using camelCase instead of snake_case**
+```json
+{
+  "taskId": "task-001",  // ← WRONG: should be task_id
+  "chunks": [...]
+}
+```
+**FIX:** Use snake_case:
+```json
+{
+  "task_id": "task-001",  // ✓ CORRECT
+  "chunks": [...]
+}
+```
+
+❌ **MISTAKE: Missing `constraint` chunk when hard_constraints non-empty**
+```json
+{
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." }
+  ]
+  // RequirementIntent has hard_constraints, but no constraint chunk here
+}
+```
+**FIX:** Add constraint chunk:
+```json
+{
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." },
+    { "chunk_id": "c2", "chunk_type": "constraint", "text": "..." }  // ✓ ADDED
+  ]
+}
+```
+
+❌ **MISTAKE: Missing `similar_case` when complexity is medium or high**
+```json
+{
+  "complexity": "medium",
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." }
+  ]
+  // Medium complexity but no similar_case
+}
+```
+**FIX:** Add similar_case with task_shape:
+```json
+{
+  "complexity": "medium",
+  "chunks": [
+    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." },
+    { "chunk_id": "c5", "chunk_type": "similar_case", "task_shape": { ... } }  // ✓ ADDED
+  ]
+}
+```
+
+---
+
+## Stage 3: ChunkQualityReport
+
+**When:** Harness stage `need_retrieval_chunk_validation`
+**Action:** `agent_validate_chunk_quality`
+**File:** `chunk_quality_report.json`
+
+### Complete Schema
+
+```json
+{
+  "validation_summary": "Overall assessment of chunk quality and coverage",
+  "chunk_assessments": [
+    {
+      "chunk_id": "c1",
+      "relevance": "high|medium|low",
+      "reason": "Why this relevance rating"
+    }
+  ],
+  "overall_coverage_adequate": true|false,
+  "gaps_identified": [
+    "Gap 1 description",
+    "Gap 2 description"
+  ],
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true|false,
+  "has_constraint": true|false,
+  "has_risk": true|false,
+  "has_pattern": false|true,
+  "has_similar_case": true|false
+}
+```
+
+### Field Reference
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `validation_summary` | YES | string | 1–2 sentence summary of overall chunk quality |
+| `chunk_assessments` | YES | array | Assessment for each chunk in the RetrievalChunkSet |
+| `chunk_assessments[].chunk_id` | YES | string | Must match a chunk_id from RetrievalChunkSet |
+| `chunk_assessments[].relevance` | YES | enum | One of: `high`, `medium`, `low` — not other variants |
+| `chunk_assessments[].reason` | YES | string | Why you assigned this relevance rating |
+| `overall_coverage_adequate` | YES | boolean | `true` if coverage is sufficient, `false` if gaps remain |
+| `gaps_identified` | YES | array | List of identified gaps. Empty `[]` if coverage is adequate. |
+| `errors` | YES | array | List of validation errors (e.g., "core_task missing", "constraint_chunk_missing_but_hard_constraints_non_empty"). Empty `[]` if no errors. |
+| `warnings` | YES | array | List of warnings (e.g., "similar_case chunk text is vague"). Empty `[]` if no warnings. |
+| `has_core_task` | YES | boolean | Must be `true` — core_task is always required |
+| `has_constraint` | YES | boolean | `true` if constraint chunk exists, `false` otherwise |
+| `has_risk` | YES | boolean | `true` if risk chunk exists, `false` otherwise |
+| `has_pattern` | YES | boolean | `true` if pattern chunk exists, `false` otherwise |
+| `has_similar_case` | YES | boolean | `true` if similar_case chunk exists, `false` otherwise |
+
+### Example
+
+```json
+{
+  "validation_summary": "RetrievalChunkSet covers core task, constraints, risks, and includes similar_case for medium complexity. All required coverage rules met.",
+  "chunk_assessments": [
+    {
+      "chunk_id": "c1",
+      "relevance": "high",
+      "reason": "Core task description clearly states JWT auth requirement and zero-downtime constraint"
+    },
+    {
+      "chunk_id": "c2",
+      "relevance": "high",
+      "reason": "Constraint chunk directly addresses hard constraints from RequirementIntent"
+    },
+    {
+      "chunk_id": "c3",
+      "relevance": "high",
+      "reason": "Risk chunk maps to risk_signals from RequirementIntent"
+    },
+    {
+      "chunk_id": "c4",
+      "relevance": "medium",
+      "reason": "Pattern chunk provides useful context but somewhat general"
+    },
+    {
+      "chunk_id": "c5",
+      "relevance": "high",
+      "reason": "Similar_case chunk has task_shape; will help find precedents"
+    }
+  ],
+  "overall_coverage_adequate": true,
+  "gaps_identified": [],
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true,
+  "has_constraint": true,
+  "has_risk": true,
+  "has_pattern": true,
+  "has_similar_case": true
+}
+```
+
+### Validation Rules (CRITICAL)
+
+When validating:
+
+1. **`has_core_task` must be `true`** — always required
+2. **`has_constraint` must be `true` IF RequirementIntent.hard_constraints is non-empty**
+3. **`has_risk` must be `true` IF RequirementIntent.risk_signals is non-empty**
+4. **`has_similar_case` must be `true` IF RequirementIntent.complexity is `medium` or `high`**
+5. **All boolean flags must be present** — do not omit them
+6. **`errors` and `warnings` must be arrays** — even if empty, include `[]`
+
+### Submission Command
+
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_validate_chunk_quality" `
+    -ArtifactType "ChunkQualityReport" `
+    -ArtifactFile "chunk_quality_report.json"
+```
+
+### Common Mistakes (AVOID THESE)
+
+❌ **MISTAKE: Missing boolean flags**
+```json
+{
+  "validation_summary": "...",
+  "chunk_assessments": [...],
+  "overall_coverage_adequate": true
+  // Missing: errors, warnings, has_core_task, has_constraint, etc.
+}
+```
+**FIX:** Include all required fields:
+```json
+{
+  "validation_summary": "...",
+  "chunk_assessments": [...],
+  "overall_coverage_adequate": true,
+  "gaps_identified": [],
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true,
+  "has_constraint": true,
+  "has_risk": true,
+  "has_pattern": false,
+  "has_similar_case": true
+}
+```
+
+❌ **MISTAKE: Non-boolean values for flags**
+```json
+{
+  "has_core_task": "yes",  // ← WRONG: should be true or false
+  "has_constraint": "true" // ← WRONG: should be boolean, not string
+}
+```
+**FIX:** Use boolean values:
+```json
+{
+  "has_core_task": true,     // ✓ CORRECT
+  "has_constraint": true     // ✓ CORRECT
+}
+```
+
+❌ **MISTAKE: `has_constraint` false when hard_constraints non-empty**
+```json
+{
+  // RequirementIntent has hard_constraints: ["...", "..."]
+  // But:
+  "has_constraint": false  // ← WRONG
+}
+```
+**FIX:** Set to `true`:
+```json
+{
+  "has_constraint": true   // ✓ CORRECT
+}
+```
+
+---
+
+## Stage 4: MCP Tool Responses
+
+**When:** Harness stage `need_mcp_retrieve_memory_by_chunks` (and later MCP stages)
+**Action:** `agent_call_mcp_retrieve_memory_by_chunks`
+
+### MCP Request Structure (What Harness Provides)
+
+When harness returns:
+```json
+{
+  "nextAction": "agent_call_mcp_retrieve_memory_by_chunks",
+  "toolName": "retrieve_memory_by_chunks",
+  "payload": {
+    "request": { ... }
+  }
+}
+```
+
+**Use `payload.request` exactly as provided. Do not modify it.**
+
+The request structure from harness will have:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "requestId": "unique-id-generated-by-harness",
+  "taskId": "task-id",
+  "requirementIntent": {
+    "taskType": "feature|refactor|etc",
+    "hardConstraints": ["...", "..."],
+    "riskSignals": ["...", "..."]
+  },
+  "retrievalChunks": [
+    {
+      "chunkId": "c1",
+      "chunkType": "CoreTask|Constraint|Risk|Pattern|SimilarCase",
+      "text": "Query text"
+    }
+  ],
+  "searchProfile": {
+    "activeOnly": true,
+    "minimumAuthority": "Reviewed",
+    "maxItemsPerChunk": 5,
+    "requireTypeSeparation": true
+  }
+}
+```
+
+**KEY: The `chunkType` in the MCP request uses PascalCase** (`CoreTask`, `SimilarCase`), **NOT snake_case** (`core_task`).
+
+Harness automatically converts your `chunk_type: "core_task"` from RetrievalChunkSet to `chunkType: "CoreTask"` for MCP.
+
+### MCP Response: Do Not Modify
+
+After calling MCP, you will get a response like:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "kind": "retrieve_memory_by_chunks",
+  "requestId": "...",
+  "taskId": "...",
+  "chunkResults": [
+    {
+      "chunkId": "c1",
+      "chunkType": "CoreTask",
+      "results": {
+        "decisions": [...],
+        "bestPractices": [...],
+        "antipatterns": [...],
+        "similarCases": [...],
+        "constraints": [...],
+        "references": [...],
+        "structures": [...]
+      },
+      "diagnostics": { ... }
+    }
+  ],
+  "notes": [...],
+  "elapsedMs": 1234
+}
+```
+
+**Submit this response exactly as received. Do not modify it.**
+
+### Submission Command
+
+```powershell
+# Write raw MCP response to file
+$mcp_response | ConvertTo-Json -Depth 100 | Out-File "mcp_response.json"
+
+# Submit to harness
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "MCP.RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_response.json"
+```
+
+---
+
+## Stage 7: ExecutionPlan
+
+**When:** Harness stage `need_execution_plan`
+**Action:** `agent_generate_execution_plan`
+**File:** `execution_plan.json`
+
+### Complete Schema
+
+```json
+{
+  "task_id": "same as RequirementIntent",
+  "task": "description of task from RequirementIntent.goal",
+  "scope": "Clearly state what is IN scope and what is OUT of scope",
+  "constraints": [
+    "Constraint 1 from RequirementIntent.hard_constraints",
+    "Constraint 2 from RequirementIntent.hard_constraints"
+  ],
+  "forbidden_actions": [
+    "Never do X because Y",
+    "Never do Z because A"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Step title",
+      "actions": ["Action 1", "Action 2"],
+      "outputs": ["Output file 1", "Output file 2"],
+      "acceptance_checks": ["Check 1", "Check 2"]
+    }
+  ],
+  "deliverables": [
+    "Deliverable 1: path/to/file",
+    "Deliverable 2: path/to/file"
+  ]
+}
+```
+
+### Field Reference
+
+| Field | Required | Notes |
+|---|---|---|
+| `task_id` | YES | Same as RequirementIntent.task_id |
+| `task` | YES | Description of the task; can copy from RequirementIntent.goal |
+| `scope` | YES | Explicit statement of what is in and out of scope |
+| `constraints` | YES | Array of hard constraints. Must match RequirementIntent.hard_constraints. Can be empty `[]`. |
+| `forbidden_actions` | YES | Array of things to never do and why. Must be non-empty. |
+| `steps` | YES | Array of execution steps. Each step must have step_number, title, actions, outputs, acceptance_checks. |
+| `deliverables` | YES | List of final deliverables (files, features, etc.). Must be non-empty. |
+
+### Example
+
+See Stage 2 in this skill file for a complete example of ExecutionPlan.
+
+### Submission Command
+
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_execution_plan" `
+    -ArtifactType "ExecutionPlan" `
+    -ArtifactFile "execution_plan.json"
+```
+
+---
+
+## Stage 8: WorkerExecutionPacket
+
+**When:** Harness stage `need_worker_execution_packet`
+**Action:** `agent_generate_worker_execution_packet`
+**File:** `worker_execution_packet.json`
+
+### Complete Schema
+
+```json
+{
+  "worker_id": "unique-id-for-this-packet",
+  "goal": "Goal from RequirementIntent.goal",
+  "scope": "Scope statement from ExecutionPlan.scope",
+  "hard_constraints": [
+    "Constraint 1",
+    "Constraint 2"
+  ],
+  "forbidden_actions": [
+    "Never do X because Y"
+  ],
+  "execution_rules": [
+    "DO NOT retrieve long-term memory independently — all memory context is in this packet",
+    "DO NOT call MCP tools — harness provided all context during planning",
+    "DO NOT replan or modify the ExecutionPlan",
+    "DO NOT expand scope beyond what is listed in scope statement"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Step title from ExecutionPlan",
+      "actions": ["Action 1", "Action 2"],
+      "outputs": ["Output 1", "Output 2"],
+      "acceptance_checks": ["Check 1", "Check 2"]
+    }
+  ],
+  "required_output_sections": [
+    "per_step_results",
+    "final_deliverables",
+    "validation_summary"
+  ]
+}
+```
+
+### Field Reference
+
+| Field | Required | Notes |
+|---|---|---|
+| `worker_id` | YES | Unique identifier for this worker packet |
+| `goal` | YES | Same as RequirementIntent.goal |
+| `scope` | YES | Same as ExecutionPlan.scope |
+| `hard_constraints` | YES | All constraints from RequirementIntent and ExecutionPlan |
+| `forbidden_actions` | YES | All forbidden actions from ExecutionPlan |
+| `execution_rules` | YES | Must include memory prohibition rules (see example above) |
+| `steps` | YES | All steps from ExecutionPlan, in order |
+| `required_output_sections` | YES | Must always be `["per_step_results", "final_deliverables", "validation_summary"]` |
+
+### Example
+
+See Stage 8 in harness_design.md section 8 for a complete example.
+
+### Critical: Memory Prohibition
+
+The `execution_rules` array MUST include:
+
+```json
+"execution_rules": [
+  "DO NOT retrieve long-term memory independently — all memory context is in this packet",
+  "DO NOT call MCP tools — harness provided all context during planning",
+  "DO NOT replan or modify the ExecutionPlan",
+  "DO NOT expand scope beyond what is listed in scope statement"
+]
+```
+
+This is not optional. Harness validates that memory retrieval is explicitly forbidden.
+
+### Submission Command
+
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_worker_execution_packet" `
+    -ArtifactType "WorkerExecutionPacket" `
+    -ArtifactFile "worker_execution_packet.json"
+```
+
+---
+
+## Summary Checklist
+
+When you're about to submit an artifact, verify:
+
+### RequirementIntent
+- [ ] Has `task_id`, `task_type`, `goal`, `hard_constraints`, `risk_signals`, `complexity`
+- [ ] All fields present
+- [ ] `task_type` is one of the allowed enum values
+- [ ] `complexity` is exactly `low`, `medium`, or `high`
+
+### RetrievalChunkSet
+- [ ] Has `task_id`, `complexity`, `chunks`
+- [ ] Has `core_task` chunk
+- [ ] Has `constraint` chunk IF hard_constraints non-empty
+- [ ] Has `risk` chunk IF risk_signals non-empty
+- [ ] Has `similar_case` with `task_shape` IF complexity is `medium` or `high`
+- [ ] All fields use snake_case
+
+### ChunkQualityReport
+- [ ] Has all boolean flags: `has_core_task`, `has_constraint`, `has_risk`, `has_pattern`, `has_similar_case`
+- [ ] Flags are booleans, not strings
+- [ ] Has `errors` and `warnings` arrays (can be empty)
+- [ ] Flags match actual chunks in RetrievalChunkSet
+
+### MCP Responses
+- [ ] Submit RAW response from MCP tool
+- [ ] Do NOT modify the response
+- [ ] Do NOT extract or summarize fields
+
+### ExecutionPlan
+- [ ] All steps have `step_number`, `title`, `actions`, `outputs`, `acceptance_checks`
+- [ ] `deliverables` is non-empty
+- [ ] `forbidden_actions` is non-empty
+
+### WorkerExecutionPacket
+- [ ] `execution_rules` explicitly forbids memory retrieval and MCP calls
+- [ ] `required_output_sections` is always `["per_step_results", "final_deliverables", "validation_summary"]`
+- [ ] All fields present
+
+---
+
+## Related Skills
+
+- `00-harness-control-plane.mdc` — Overall planning loop
+- `01-harness-failure.mdc` — Error handling and recovery
+- `03-harness-mcp-tool-calling.mdc` — MCP tool calling rules
+- `04-harness-skill-activation.mdc` — When planning is activated
+
