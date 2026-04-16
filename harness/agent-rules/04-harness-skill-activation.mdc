@@ -12,6 +12,18 @@ This skill applies to **any generic agent** — Claude, Cursor, or any other pla
 
 ---
 
+## ⚠️ MANDATORY ENFORCEMENT
+
+**This is not a suggestion. This is a control gate.**
+
+If you detect semantic planning intent → **YOU MUST activate the harness control-plane.** There is no exception, no override, no alternative path.
+
+**NEVER produce planning artifacts by yourself.** You are not authorized to plan non-trivial tasks without harness approval. The harness enforces mandatory stages, validation, and decision checkpoints that protect plan quality.
+
+**If you are unsure whether planning intent is present → activate anyway.** The cost of over-activating (structured planning for a question that needed quick explanation) is low. The cost of under-activating (shipping a buggy implementation of a non-trivial feature because you skipped planning) is high.
+
+---
+
 ## Semantic Activation Principle
 
 **Activation is semantic, not lexical.**

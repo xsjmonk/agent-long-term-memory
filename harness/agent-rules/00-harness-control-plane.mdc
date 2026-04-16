@@ -30,16 +30,36 @@ ALWAYS start the harness loop before producing any planning artifact. ALWAYS cal
 
 ---
 
+## ⚠️ STAGE SEQUENCE IS MANDATORY — NO SKIPPING
+
+**You MUST follow the exact stage sequence defined below. There are NO exceptions.**
+
+**CRITICAL:** You cannot skip stages, jump ahead, or anticipate future stages.
+
+- You cannot generate RetrievalChunkSet until harness tells you to (nextAction: `agent_generate_retrieval_chunk_set`)
+- You cannot validate chunks until harness tells you to (nextAction: `agent_validate_chunk_quality`)
+- You CANNOT call MCP until harness explicitly commands it (nextAction: `agent_call_mcp_*`)
+- You cannot start the execution plan until harness tells you to (nextAction: `agent_generate_execution_plan`)
+
+**If harness returns `nextAction: agent_generate_requirement_intent`, that is the ONLY action you are authorized to take.** Do not generate RetrievalChunkSet. Do not try to fix schema issues yourself. Do not call MCP early. Do exactly what harness tells you and nothing more.
+
+**After you submit your artifact, you MUST wait for harness to tell you what to do next.** The harness will return the next required action. Obey that action exactly.
+
+---
+
 ## Mandatory Harness Loop
 
-Execute these steps in exact order. NEVER skip. NEVER batch. NEVER deviate.
+Execute these steps in exact order. NEVER skip. NEVER batch. NEVER deviate. NEVER anticipate future stages.
 
 1. Call `start-session` to register the task and receive the first required step
-2. Read `nextAction` from the harness response
-3. Perform ONLY the action named in `nextAction`
-4. Write the produced artifact to a local temp file
-5. Call `submit-step-result` — submit it back to harness to receive the next required step
-6. Repeat steps 2–5 until `stage == complete` or `nextAction == stop_with_error`
+2. **VALIDATE the response: Check if `success == false` OR `nextAction == "stop_with_error"`. If either is true, STOP immediately and read the `errors` array. Do NOT proceed.**
+3. Read `nextAction` from the harness response — this is your ONLY authorized action
+4. Perform ONLY the action named in `nextAction` — no more, no less
+5. Write the produced artifact to a local temp file
+6. Call `submit-step-result` — submit it back to harness to receive the next required step
+7. **VALIDATE every response: Check `success` and `nextAction` before proceeding to the next stage.**
+8. **Wait for harness to tell you the next action.** Do NOT skip ahead or try to do the next stage yourself.
+9. Repeat steps 3–8 until `stage == complete` or `nextAction == stop_with_error`
 
 ### Setup (First Time)
 
@@ -144,14 +164,59 @@ The harness enforces exactly this stage sequence. Each stage has ONE allowed act
 
 **Output file:** `retrieval_chunk_set.json`
 
+**Required fields:**
+- `task_id` — same task ID from RequirementIntent
+- `complexity` — copy from RequirementIntent (low|medium|high)
+- `chunks` — array of retrieval chunks (see below)
+
+**Chunk types and requirements:**
+1. **core_task** (required: at least one) — The main topic you need information about
+   - Must have `text` field with description
+2. **constraint** (required if hard_constraints exist) — Things that limit your solution
+   - Must have `text` field with description
+3. **risk** (required if risk_signals exist) — Risks you need to understand
+   - Must have `text` field with description
+4. **pattern** (optional) — Design patterns or implementation approaches
+   - Must have `text` field with description
+5. **similar_case** (required if complexity is medium or high) — Similar past cases to learn from
+   - Must have `task_shape` object with: `task_type`, `feature_shape`, `engine_change_allowed` (boolean), `likely_layers` (array), `risk_signals` (array)
+
 **Exact schema:**
 ```json
 {
-  "chunk_queries": [
+  "task_id": "same as RequirementIntent",
+  "complexity": "low|medium|high",
+  "chunks": [
     {
-      "semantic_intent": "Description of what you need to retrieve",
-      "keywords": ["keyword1", "keyword2", "keyword3"],
-      "category": "memory|pattern|constraint|reference|architecture"
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "text": "Description of main topic to understand"
+    },
+    {
+      "chunk_id": "c2",
+      "chunk_type": "constraint",
+      "text": "Limitations or guardrails that apply"
+    },
+    {
+      "chunk_id": "c3",
+      "chunk_type": "risk",
+      "text": "Risks or gotchas to be aware of"
+    },
+    {
+      "chunk_id": "c4",
+      "chunk_type": "pattern",
+      "text": "Related design patterns or implementations to learn from"
+    },
+    {
+      "chunk_id": "c5",
+      "chunk_type": "similar_case",
+      "task_shape": {
+        "task_type": "bugfix|feature|refactor|implementation",
+        "feature_shape": "Description of shape/scope",
+        "engine_change_allowed": false,
+        "likely_layers": ["layer1", "layer2"],
+        "risk_signals": ["risk1", "risk2"]
+      }
     }
   ]
 }
@@ -160,16 +225,39 @@ The harness enforces exactly this stage sequence. Each stage has ONE allowed act
 **Example:**
 ```json
 {
-  "chunk_queries": [
+  "task_id": "auth-bugfix-123",
+  "complexity": "medium",
+  "chunks": [
     {
-      "semantic_intent": "Find existing authentication patterns and security constraints",
-      "keywords": ["auth", "session", "security", "token"],
-      "category": "pattern"
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "text": "How JWT token validation is currently implemented in the auth layer"
     },
     {
-      "semantic_intent": "Find database migration precedents and guardrails",
-      "keywords": ["migration", "database", "schema", "downtime"],
-      "category": "constraint"
+      "chunk_id": "c2",
+      "chunk_type": "constraint",
+      "text": "Must not break existing session-based auth for backward compatibility"
+    },
+    {
+      "chunk_id": "c3",
+      "chunk_type": "risk",
+      "text": "Token expiration handling and refresh token rotation patterns"
+    },
+    {
+      "chunk_id": "c4",
+      "chunk_type": "pattern",
+      "text": "JWT implementation patterns used elsewhere in the codebase"
+    },
+    {
+      "chunk_id": "c5",
+      "chunk_type": "similar_case",
+      "task_shape": {
+        "task_type": "bugfix",
+        "feature_shape": "auth layer token handling",
+        "engine_change_allowed": false,
+        "likely_layers": ["auth", "session", "api"],
+        "risk_signals": ["backward compat", "token refresh", "expiration"]
+      }
     }
   ]
 }
@@ -192,22 +280,27 @@ The harness enforces exactly this stage sequence. Each stage has ONE allowed act
 
 **Output file:** `chunk_quality_report.json`
 
+**Required fields:**
+- `isValid` (boolean) — whether all chunks passed quality validation
+- `errors` (array of strings) — validation errors (can be empty if isValid=true)
+- `warnings` (array of strings) — validation warnings (can be empty)
+- `has_core_task` (boolean) — whether core_task chunk was present
+- `has_constraint` (boolean) — whether constraint chunk was present
+- `has_risk` (boolean) — whether risk chunk was present
+- `has_pattern` (boolean) — whether pattern chunk was present
+- `has_similar_case` (boolean) — whether similar_case chunk was present
+
 **Exact schema:**
 ```json
 {
-  "validation_summary": "Overall assessment of chunk quality and coverage",
-  "chunk_assessments": [
-    {
-      "chunk_id": "ID from harness retrieval response",
-      "relevance": "high|medium|low",
-      "reason": "Why this relevance rating"
-    }
-  ],
-  "overall_coverage_adequate": true|false,
-  "gaps_identified": [
-    "Gap 1 description if any",
-    "Gap 2 description if any"
-  ]
+  "isValid": true,
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true,
+  "has_constraint": true,
+  "has_risk": true,
+  "has_pattern": true,
+  "has_similar_case": true
 }
 ```
 

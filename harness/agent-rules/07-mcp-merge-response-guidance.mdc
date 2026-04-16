@@ -1,0 +1,62 @@
+---
+description: Guide for agents submitting MCP merge responses with complete schema and examples
+globs:
+alwaysApply: false
+---
+
+# MCP Merge Response Schema and Examples
+
+## When You Need This
+
+When harness returns `nextAction: "agent_call_mcp_merge_retrieval_results"` and you need to submit the consolidated knowledge from MCP retrieval.
+
+---
+
+## Complete Merge Response Schema
+
+```json
+{
+  "task_id": "from-mcp-response-task_id",
+  "merged": {
+    "decisions": [
+      {"knowledge_item_id": "dec-001", "title": "Decision title", "summary": "What decision was made"}
+    ],
+    "best_practices": [
+      {"knowledge_item_id": "bp-001", "title": "Practice title", "summary": "What is the best practice"}
+    ],
+    "anti_patterns": [
+      {"knowledge_item_id": "ap-001", "title": "Anti-pattern title", "summary": "What to avoid"}
+    ],
+    "similar_cases": [
+      {"knowledge_item_id": "sc-001", "title": "Case title", "summary": "Similar situation"}
+    ],
+    "constraints": [
+      {"knowledge_item_id": "con-001", "title": "Constraint", "summary": "Hard requirement"}
+    ],
+    "references": [
+      {"knowledge_item_id": "ref-001", "title": "Reference", "summary": "Code location or commit"}
+    ],
+    "structures": [
+      {"knowledge_item_id": "str-001", "title": "Structure", "summary": "Data structure or pattern"}
+    ]
+  }
+}
+```
+
+## Required Fields
+
+- `task_id` - Same as from MCP response
+- `merged` - Must contain ALL 7 buckets (even if empty arrays)
+  - `decisions` - Key decisions discovered
+  - `best_practices` - Proven approaches
+  - `anti_patterns` - Things to avoid
+  - `similar_cases` - Related implementations
+  - `constraints` - Hard requirements
+  - `references` - Code pointers
+  - `structures` - System components
+
+Each item must have: `knowledge_item_id`, `title`, `summary`
+
+---
+
+**Created:** 2026-04-16

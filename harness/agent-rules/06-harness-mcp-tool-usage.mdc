@@ -1,0 +1,182 @@
+---
+description: Guide for agents on how to call MCP tools during harness planning. Complete examples and error handling.
+globs:
+alwaysApply: false
+---
+
+# MCP Tool Usage Guide
+
+## When You Need This Skill
+
+This skill activates when harness returns `nextAction` starting with `agent_call_mcp_`:
+- `agent_call_mcp_retrieve_memory_by_chunks`
+- `agent_call_mcp_merge_retrieval_results`
+- `agent_call_mcp_build_memory_context_pack`
+
+---
+
+## Critical Rules
+
+1. **Extract the exact request from harness payload** — harness provides `payload.request` with the complete tool request
+2. **Use JSON-RPC 2.0 protocol** — MCP uses JSON-RPC 2.0, not REST
+3. **Do NOT modify the request** — use harness-provided request exactly as-is
+4. **Submit raw MCP response back to harness** — do not parse, filter, or modify the response
+
+---
+
+## MCP Server Connection
+
+**Endpoint:** `http://127.0.0.1:5081/`
+**Protocol:** JSON-RPC 2.0
+**Headers:** `Accept: application/json, text/event-stream`
+**Response Format:** SSE (Server-Sent Events) - look for `data:` prefix
+
+---
+
+## Step-by-Step MCP Call Procedure
+
+### 1. Get the Request from Harness
+
+Harness provides `payload.request` containing:
+- `schemaVersion`: Version of the request schema
+- `requestId`: Unique request identifier
+- `taskId`: The planning task ID
+- `requirementIntent`: Task requirements
+- `retrievalChunks`: What information to retrieve
+
+### 2. Format as JSON-RPC 2.0
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "retrieve_memory_by_chunks",
+    "arguments": {
+      "schemaVersion": "...",
+      "requestId": "...",
+      "taskId": "...",
+      "requirementIntent": {...},
+      "retrievalChunks": {...}
+    }
+  }
+}
+```
+
+### 3. Call MCP Server
+
+```powershell
+$ServerUrl = "http://127.0.0.1:5081/"
+$Headers = @{ "Accept" = "application/json, text/event-stream" }
+
+$jsonRpcBody = @{
+    jsonrpc = "2.0"
+    id = 1
+    method = "tools/call"
+    params = @{
+        name = "retrieve_memory_by_chunks"
+        arguments = $requestFromHarness  # Use payload.request from harness exactly
+    }
+} | ConvertTo-Json -Depth 15
+
+$response = Invoke-WebRequest -Uri $ServerUrl -Method Post `
+    -ContentType "application/json" -Headers $Headers `
+    -Body $jsonRpcBody -UseBasicParsing -TimeoutSec 30
+
+# Parse SSE response: find line starting with "data:"
+$content = $response.Content
+$dataLine = ($content -split "`n") | Where-Object { $_ -match "^data:" } | Select-Object -First 1
+$json = $dataLine -replace "^data:\s*", ""
+$result = $json | ConvertFrom-Json
+```
+
+### 4. Build Response for Harness
+
+The MCP response must be wrapped in the format harness expects:
+
+```json
+{
+  "task_id": "same task_id from request",
+  "chunk_results": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "results": {
+        "decisions": [...],
+        "best_practices": [...],
+        "anti_patterns": [...],
+        "similar_cases": [...],
+        "constraints": [...],
+        "references": [...],
+        "structures": [...]
+      }
+    },
+    ...
+  ]
+}
+```
+
+### 5. Each Knowledge Item in Results Requires
+
+- `knowledge_item_id` (string): Unique ID like "dec-001", "bp-002", etc.
+- `title` (string): Short title of the knowledge item
+- `summary` (string): 1-2 sentence description of what was learned
+
+### 6. Submit Response Back to Harness
+
+```powershell
+$mcp_response | ConvertTo-Json -Depth 20 | Out-File "mcp_retrieve_response.json" -Encoding UTF8
+
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sessionId `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_retrieve_response.json"
+```
+
+---
+
+## Common MCP Tools
+
+### retrieve_memory_by_chunks
+
+**Purpose:** Retrieve relevant knowledge from long-term memory based on retrieval chunks
+
+**Input:** Task requirement and retrieval chunk queries
+**Output:** Organized knowledge in 7 buckets per chunk
+
+**Result Buckets** (all required, can be empty):
+- `decisions` — Key architectural or design decisions made
+- `best_practices` — Proven patterns and recommended approaches
+- `anti_patterns` — Things to avoid, common mistakes
+- `similar_cases` — Past cases with similar characteristics
+- `constraints` — Hard requirements and limitations
+- `references` — Specific code locations and commits to reference
+- `structures` — Data structures, class designs, system components
+
+---
+
+## Error Handling
+
+If MCP call fails:
+
+1. **Network Error** — MCP server not running or unreachable
+   - Check: `ping http://127.0.0.1:5081/`
+   - Verify server process is running
+   - Report error to harness via empty response with task_id
+
+2. **MCP Tool Error** — Tool returned error response
+   - Check `result.isError` in response
+   - Create mock response with task_id and empty chunk_results arrays
+   - Submit back to harness so planning can continue
+
+3. **Malformed Response** — Response doesn't match expected schema
+   - Still submit it back to harness
+   - Harness validator will reject and guide you on what's missing
+
+---
+
+**Created:** 2026-04-16
+**Version:** 1.0
+**For:** Any agent calling MCP tools during harness planning

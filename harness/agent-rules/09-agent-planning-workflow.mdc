@@ -1,0 +1,346 @@
+---
+description: Complete step-by-step workflow for any agent executing harness planning. Mandatory checklist before each stage submission. Prevents schema errors and validates responses.
+globs:
+alwaysApply: true
+---
+
+# Agent Planning Workflow - Mandatory Checklist
+
+## Before Starting Any Planning Session
+
+✅ Read `04-harness-skill-activation.mdc` — Understand when planning is mandatory
+✅ Read `00-harness-control-plane.mdc` — Understand the stage sequence
+✅ Read `05-artifact-schemas-detailed.mdc` — Have exact JSON schemas ready
+✅ Read `08-mcp-tool-calling-complete-guide.mdc` — If calling MCP tools
+
+**DO NOT START SESSION UNTIL YOU'VE READ THESE FOUR SKILLS.**
+
+---
+
+## Stage-by-Stage Workflow
+
+### STAGE 1: RequirementIntent
+
+**Harness says:** `stage: need_requirement_intent`, `nextAction: agent_generate_requirement_intent`
+
+**Your task:** Create `requirement_intent.json`
+
+**Checklist before submitting:**
+- [ ] Has `task_id` (unique string)
+- [ ] Has `task_type` (exactly one of: implementation, refactor, bugfix, feature, migration, debugging)
+- [ ] Has `goal` (1-2 sentences, clear and specific)
+- [ ] Has `hard_constraints` (array, can be empty `[]`)
+- [ ] Has `risk_signals` (array, can be empty `[]`)
+- [ ] Has `complexity` (exactly: low, medium, or high - NOT variants like "low-complexity")
+- [ ] JSON is valid (no syntax errors)
+- [ ] File is named exactly `requirement_intent.json`
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_generate_requirement_intent" `
+    -ArtifactType "RequirementIntent" `
+    -ArtifactFile "requirement_intent.json"
+```
+
+**Validate Response:**
+```powershell
+$r1 = ... | ConvertFrom-Json
+if (-not $r1.success) {
+    Write-Host "ERROR: $($r1.errors[0])"
+    exit 1
+}
+Write-Host "Next: $($r1.nextAction)"
+```
+
+---
+
+### STAGE 2: RetrievalChunkSet
+
+**Harness says:** `stage: need_retrieval_chunk_set`, `nextAction: agent_generate_retrieval_chunk_set`
+
+**Your task:** Create `retrieval_chunk_set.json`
+
+**Checklist before submitting:**
+- [ ] Has `task_id` (SAME as RequirementIntent)
+- [ ] Has `complexity` (SAME as RequirementIntent: low, medium, or high)
+- [ ] Has `chunks` array with at least:
+  - [ ] Exactly ONE chunk with `chunk_type: "core_task"` and `text` field
+  - [ ] If RequirementIntent has `hard_constraints`: at least ONE `constraint` chunk with `text`
+  - [ ] If RequirementIntent has `risk_signals`: at least ONE `risk` chunk with `text`
+  - [ ] If complexity is medium/high: at least ONE `similar_case` chunk WITH `task_shape`
+
+**task_shape for similar_case (MUST have ALL fields):**
+```json
+{
+  "task_type": "bugfix|feature|implementation|refactor|migration|debugging",
+  "feature_shape": "string describing scope",
+  "complexity": "low|medium|high",
+  "involved_layers": ["layer1", "layer2"],
+  "engine_change_allowed": false,  // boolean, usually false
+  "likely_layers": ["layer1", "layer2"],
+  "risk_signals": ["risk1", "risk2"]
+}
+```
+
+**All chunks MUST have:**
+- [ ] `chunk_id` (string like "c1", "c2", etc.)
+- [ ] `chunk_type` (exactly: core_task, constraint, risk, pattern, or similar_case)
+- [ ] `text` field (for all except similar_case if it has task_shape)
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_generate_retrieval_chunk_set" `
+    -ArtifactType "RetrievalChunkSet" `
+    -ArtifactFile "retrieval_chunk_set.json"
+```
+
+**Validate Response:**
+```powershell
+$r2 = ... | ConvertFrom-Json
+if (-not $r2.success) {
+    Write-Host "ERRORS found: $($r2.errors | ConvertTo-Json)"
+    # Fix the issues and resubmit with same SessionId
+    exit 1
+}
+```
+
+---
+
+### STAGE 3: ChunkQualityReport
+
+**Harness says:** `stage: need_retrieval_chunk_validation`, `nextAction: agent_validate_chunk_quality`
+
+**Your task:** Create `chunk_quality_report.json`
+
+**Checklist before submitting:**
+- [ ] Has `isValid` (boolean, should be true if everything checks out)
+- [ ] Has `errors` (array of strings, empty `[]` if no errors)
+- [ ] Has `warnings` (array of strings, empty `[]` if no warnings)
+- [ ] Has `has_core_task` (boolean, must be true)
+- [ ] Has `has_constraint` (boolean, true if hard_constraints non-empty)
+- [ ] Has `has_risk` (boolean, true if risk_signals non-empty)
+- [ ] Has `has_pattern` (boolean, can be true or false)
+- [ ] Has `has_similar_case` (boolean, must be true if complexity is medium/high)
+- [ ] JSON is valid
+
+**Minimal Valid Response:**
+```json
+{
+  "isValid": true,
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true,
+  "has_constraint": true,
+  "has_risk": true,
+  "has_pattern": false,
+  "has_similar_case": true
+}
+```
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_validate_chunk_quality" `
+    -ArtifactType "ChunkQualityReport" `
+    -ArtifactFile "chunk_quality_report.json"
+```
+
+---
+
+### STAGE 4: MCP retrieve_memory_by_chunks
+
+**Harness says:** `stage: need_mcp_retrieve_memory_by_chunks`, `nextAction: agent_call_mcp_retrieve_memory_by_chunks`
+
+**Your task:** Call MCP server and submit response
+
+**Procedure:**
+1. Get `payload.request` from harness
+2. Call MCP server with JSON-RPC (see `08-mcp-tool-calling-complete-guide.mdc`)
+3. Parse SSE response
+4. Save to `mcp_response.json`
+
+**Checklist before submitting:**
+- [ ] MCP response is valid JSON
+- [ ] Has `task_id` field
+- [ ] Has `chunk_results` array
+- [ ] Each chunk_result has `chunk_id`, `chunk_type`, `results` object
+- [ ] results object has all 7 buckets: decisions, best_practices, anti_patterns, similar_cases, constraints, references, structures
+- [ ] Each item in buckets has: `knowledge_item_id`, `title`, `summary`
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "MCP.RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_response.json"
+```
+
+---
+
+### STAGE 5: MCP merge_retrieval_results
+
+**Harness says:** `stage: need_mcp_merge_retrieval_results`, `nextAction: agent_call_mcp_merge_retrieval_results`
+
+**Your task:** Call MCP server and submit merged response
+
+**Critical - merged object MUST contain all 7 buckets:**
+```json
+{
+  "task_id": "from_mcp_response",
+  "merged": {
+    "decisions": [...],
+    "best_practices": [...],
+    "anti_patterns": [...],
+    "similar_cases": [...],
+    "constraints": [...],
+    "references": [...],
+    "structures": [...]
+  }
+}
+```
+
+**Checklist before submitting:**
+- [ ] Has `task_id`
+- [ ] Has `merged` object (NOT `merge_synthesis` or other names)
+- [ ] `merged` has ALL 7 buckets (even if empty arrays)
+- [ ] Each bucket is an array
+- [ ] Each item in arrays has: `knowledge_item_id`, `title`, `summary`
+- [ ] NO unknown fields in merged (like `root_cause`, `solution`, etc.)
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_call_mcp_merge_retrieval_results" `
+    -ArtifactType "MergeRetrievalResultsResponse" `
+    -ArtifactFile "merge_response.json"
+```
+
+---
+
+### STAGE 6: MCP build_memory_context_pack
+
+**Harness says:** `stage: need_mcp_build_memory_context_pack`, `nextAction: agent_call_mcp_build_memory_context_pack`
+
+**Your task:** Call MCP server and submit context pack response
+
+**Checklist before submitting:**
+- [ ] Has `task_id`
+- [ ] Has `context_pack` object with synthesized understanding
+- [ ] JSON is valid
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_call_mcp_build_memory_context_pack" `
+    -ArtifactType "MCP.BuildMemoryContextPackResponse" `
+    -ArtifactFile "context_pack.json"
+```
+
+---
+
+### STAGE 7: ExecutionPlan
+
+**Harness says:** `stage: need_execution_plan`, `nextAction: agent_generate_execution_plan`
+
+**Your task:** Create `execution_plan.json` using knowledge from MCP
+
+**Must include:**
+- [ ] `task_id`
+- [ ] `task` (description of what's being fixed/built)
+- [ ] `scope` (IN scope and OUT of scope)
+- [ ] `constraints` (from RequirementIntent)
+- [ ] `forbidden_actions` (things to never do)
+- [ ] `steps` (array of steps with step_number, title, actions, outputs, acceptance_checks)
+- [ ] `deliverables` (what will be delivered)
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_generate_execution_plan" `
+    -ArtifactType "ExecutionPlan" `
+    -ArtifactFile "execution_plan.json"
+```
+
+---
+
+### STAGE 8: WorkerExecutionPacket
+
+**Harness says:** `stage: need_worker_execution_packet`, `nextAction: agent_generate_worker_execution_packet`
+
+**Your task:** Create `worker_execution_packet.json` for a developer
+
+**Must include:**
+- [ ] `worker_id`
+- [ ] `goal`
+- [ ] `scope`
+- [ ] `hard_constraints`
+- [ ] `forbidden_actions`
+- [ ] `execution_rules` (including memory prohibition rules)
+- [ ] `steps` (from ExecutionPlan)
+- [ ] `required_output_sections`
+
+**Submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_generate_worker_execution_packet" `
+    -ArtifactType "WorkerExecutionPacket" `
+    -ArtifactFile "worker_execution_packet.json"
+```
+
+---
+
+## If You Get an Error
+
+**DO NOT try to fix it yourself. Instead:**
+
+1. Read the error message from harness response
+2. Check if it's a schema issue (missing field, wrong type, etc.)
+3. If schema issue: Refer to the relevant skill doc (e.g., `05-artifact-schemas-detailed.mdc`)
+4. Fix the JSON file
+5. Resubmit with the same SessionId and Action
+
+**DO NOT skip stages or try the next stage.**
+
+**DO NOT modify harness-provided requests (from MCP stages).**
+
+---
+
+## Response Validation Template
+
+Use this for every harness response:
+
+```powershell
+$response = ... | ConvertFrom-Json
+
+# ALWAYS check these first
+if (-not $response.success) {
+    Write-Host "SUCCESS=false. Errors:"
+    $response.errors | ForEach-Object { Write-Host "  - $_" }
+    exit 1
+}
+
+if ($response.stage -eq "error" -or $response.nextAction -eq "stop_with_error") {
+    Write-Host "STAGE=error. Check errors:"
+    $response.errors | ForEach-Object { Write-Host "  - $_" }
+    exit 1
+}
+
+# If we get here, response is valid
+Write-Host "OK. Next stage: $($response.stage), next action: $($response.nextAction)"
+```
+
+---
+
+**Created:** 2026-04-16
+**For:** All agents executing harness planning
+**Status:** Mandatory workflow with validation checklists

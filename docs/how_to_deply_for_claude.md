@@ -4,6 +4,30 @@ This file is automatically loaded by Claude Code and provides project-specific g
 
 ---
 
+## ⚠️ CONTROL PLANE ENFORCEMENT (READ FIRST)
+
+**You are in a project that requires harness control-plane for all planning work.**
+
+When you receive any task that involves:
+- **Designing** anything (architecture, UI flow, database schema, API contracts)
+- **Planning** an implementation (steps, decomposition, approach)
+- **Deciding** how to implement or change something (strategy, design decisions)
+- **Complex refactoring** or large feature work
+- **Root cause analysis** or debugging strategy before a fix
+
+**YOU MUST:**
+1. **STOP immediately**
+2. **DO NOT produce your own plan or design**
+3. **Call harness:** `.\harness\invoke-harness-control-plane.ps1 start-session -RawTask "<task>"`
+4. **Follow harness control-plane** (`harness/agent-rules/00-harness-control-plane.mdc`) until it returns `stage: complete`
+5. **NEVER skip this.** There is no exception. There is no "quick design." There is no "I'll just outline the approach."
+
+**If you are uncertain whether a task requires planning → assume it does and call harness.**
+
+**The cost of over-planning (structured analysis for a clarification question) is minimal. The cost of under-planning (shipping a broken feature because you skipped structured planning) is catastrophic.**
+
+---
+
 ## Harness Planning Mode
 
 This project uses a **harness control-plane** for all non-trivial planning tasks. The harness enforces a structured planning flow with mandatory stages and validation.
@@ -37,22 +61,35 @@ Read these skills in order before starting any planning session:
 
 ```powershell
 # 1. Start a planning session
-.\harness\invoke-harness-control-plane.ps1 start-session -RawTask "Your task description"
+$response = .\harness\invoke-harness-control-plane.ps1 start-session -RawTask "Your task description"
 
-# 2. Read the harness response; it tells you nextAction
+# 2. VALIDATE the response (CRITICAL: do not skip this)
+# If success == false OR nextAction == "stop_with_error", STOP and read errors array
+if ($response.success -eq $false -or $response.nextAction -eq "stop_with_error") {
+  Write-Output "Error: $($response.errors)"
+  # Fix the issue and retry with a new start-session
+}
+
+# 3. Read nextAction from the validated response
 # Example: nextAction: "agent_generate_requirement_intent"
 
-# 3. Generate the requested artifact (use exact schema from 05-artifact-schemas-detailed.mdc)
+# 4. Generate the requested artifact (use exact schema from 05-artifact-schemas-detailed.mdc)
 # Example: Create requirement_intent.json
 
-# 4. Submit it back to harness
-.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+# 5. Submit it back to harness
+$response = .\harness\invoke-harness-control-plane.ps1 submit-step-result `
     -SessionId "<sessionId>" `
     -Action "agent_generate_requirement_intent" `
     -ArtifactType "RequirementIntent" `
     -ArtifactFile "requirement_intent.json"
 
-# 5. Repeat steps 2-4 until harness returns "stage: complete"
+# 6. VALIDATE every response (same as step 2)
+if ($response.success -eq $false -or $response.nextAction -eq "stop_with_error") {
+  Write-Output "Error: $($response.errors)"
+  # Fix and resubmit with the same -SessionId
+}
+
+# 7. Repeat steps 3-6 until harness returns "stage: complete"
 ```
 
 ### Artifact Schemas
@@ -70,6 +107,7 @@ This file contains:
 
 **ALWAYS:**
 - ✅ Call `start-session` before producing any artifact
+- ✅ **VALIDATE every harness response before proceeding:** Check if `success == false` OR `nextAction == "stop_with_error"`. If either is true, STOP immediately.
 - ✅ Read `nextAction` from harness before taking any action
 - ✅ Submit every artifact to harness via `submit-step-result`
 - ✅ Stop immediately if harness returns `nextAction: stop_with_error`

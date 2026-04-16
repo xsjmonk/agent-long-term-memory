@@ -1,0 +1,315 @@
+---
+description: Complete MCP tool calling guide for agents. Covers JSON-RPC 2.0 protocol, MCP server communication, and step-by-step examples for all three MCP tools used during harness planning stages 4-6.
+globs:
+alwaysApply: false
+---
+
+# MCP Tool Calling - Complete Guide for Agents
+
+## When You Need This
+
+When harness returns `nextAction` starting with `agent_call_mcp_`:
+- `agent_call_mcp_retrieve_memory_by_chunks` (Stage 4)
+- `agent_call_mcp_merge_retrieval_results` (Stage 5)
+- `agent_call_mcp_build_memory_context_pack` (Stage 6)
+
+**This skill is MANDATORY when calling ANY MCP tool during harness planning.**
+
+---
+
+## MCP Server Connection Details
+
+**Server URL:** `http://127.0.0.1:5081/`
+
+**Protocol:** JSON-RPC 2.0 (NOT REST)
+
+**Headers:**
+```json
+{
+  "Accept": "application/json, text/event-stream",
+  "Content-Type": "application/json"
+}
+```
+
+**Response Format:** Server-Sent Events (SSE)
+- Look for line starting with `data:`
+- Extract JSON after `data: ` prefix
+- Parse as standard JSON object
+
+---
+
+## Three-Step Process for Any MCP Call
+
+### Step 1: Get Request from Harness
+
+When harness returns `nextAction: agent_call_mcp_*`, look at `payload.request`:
+
+```powershell
+$harness_response.payload.request  # Contains exact MCP request parameters
+```
+
+**CRITICAL:** Use this request exactly as-is. Do NOT modify, reformat, or change field names.
+
+### Step 2: Build JSON-RPC 2.0 Envelope
+
+Wrap the harness-provided request in this structure:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "<tool_name_from_harness>",
+    "arguments": <payload.request from harness>
+  }
+}
+```
+
+### Step 3: Call MCP Server and Parse Response
+
+```powershell
+$body = @{
+    jsonrpc = "2.0"
+    id = 1
+    method = "tools/call"
+    params = @{
+        name = $tool_name  # From harness nextAction
+        arguments = $harness_request  # payload.request from harness
+    }
+} | ConvertTo-Json -Depth 20
+
+$response = Invoke-WebRequest `
+    -Uri "http://127.0.0.1:5081/" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Headers @{ "Accept" = "application/json, text/event-stream" } `
+    -Body $body `
+    -UseBasicParsing `
+    -TimeoutSec 30
+
+# Parse SSE response
+$raw = $response.Content
+$dataLine = ($raw -split "`n") | Where-Object { $_ -match "^data:" } | Select-Object -First 1
+$json = $dataLine -replace "^data:\s*", ""
+$mcp_result = $json | ConvertFrom-Json
+```
+
+---
+
+## Tool-Specific Responses
+
+### Tool 1: retrieve_memory_by_chunks (Stage 4)
+
+**Input:** Task requirement intent + retrieval chunks
+
+**Output Structure:**
+```json
+{
+  "task_id": "from_mcp_request",
+  "chunk_results": [
+    {
+      "chunk_id": "c1",
+      "chunk_type": "core_task",
+      "results": {
+        "decisions": [
+          {"knowledge_item_id": "dec-001", "title": "Title", "summary": "Summary"}
+        ],
+        "best_practices": [
+          {"knowledge_item_id": "bp-001", "title": "Title", "summary": "Summary"}
+        ],
+        "anti_patterns": [],
+        "similar_cases": [],
+        "constraints": [],
+        "references": [],
+        "structures": []
+      }
+    }
+  ]
+}
+```
+
+**Action to Submit Back:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sessionId `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "MCP.RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_response.json"
+```
+
+### Tool 2: merge_retrieval_results (Stage 5)
+
+**Input:** Retrieved memory from tool 1
+
+**Output Structure:**
+```json
+{
+  "task_id": "from_mcp_request",
+  "merged": {
+    "decisions": [
+      {"knowledge_item_id": "dec-m1", "title": "Title", "summary": "Summary"}
+    ],
+    "best_practices": [],
+    "anti_patterns": [],
+    "similar_cases": [],
+    "constraints": [],
+    "references": [],
+    "structures": []
+  }
+}
+```
+
+**CRITICAL:** The `merged` object MUST contain all 7 buckets (even if empty arrays):
+- decisions
+- best_practices
+- anti_patterns
+- similar_cases
+- constraints
+- references
+- structures
+
+**Action to Submit Back:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sessionId `
+    -Action "agent_call_mcp_merge_retrieval_results" `
+    -ArtifactType "MergeRetrievalResultsResponse" `
+    -ArtifactFile "merge_response.json"
+```
+
+### Tool 3: build_memory_context_pack (Stage 6)
+
+**Input:** Merged results from tool 2
+
+**Output Structure:**
+```json
+{
+  "task_id": "from_mcp_request",
+  "context_pack": {
+    "summary": "Synthesized understanding of the task",
+    "key_decisions": [
+      {"id": "dec-1", "title": "Title", "rationale": "Why this was decided"}
+    ],
+    "implementation_approach": "Recommended approach based on knowledge",
+    "risks": [
+      {"id": "risk-1", "description": "Risk description", "mitigation": "How to mitigate"}
+    ]
+  }
+}
+```
+
+**Action to Submit Back:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sessionId `
+    -Action "agent_call_mcp_build_memory_context_pack" `
+    -ArtifactType "MCP.BuildMemoryContextPackResponse" `
+    -ArtifactFile "context_pack.json"
+```
+
+---
+
+## Error Handling
+
+### Network Error (Server Not Responding)
+
+```powershell
+try {
+    $response = Invoke-WebRequest ...
+} catch {
+    Write-Host "MCP server not responding: $_"
+    # Report error to harness
+    exit 1
+}
+```
+
+**Recovery:** Check if `http://127.0.0.1:5081/` is running. Start if needed.
+
+### Malformed Response (SSE Parsing Failed)
+
+```powershell
+if (-not $dataLine) {
+    Write-Host "ERROR: No valid SSE response from MCP"
+    Write-Host "Raw response: $($response.Content | Select-Object -First 200 chars)"
+    exit 1
+}
+```
+
+**Recovery:** Verify response contains `data: {json}` format.
+
+### MCP Tool Error (isError: true in result)
+
+```powershell
+if ($mcp_result.result.isError) {
+    Write-Host "MCP tool error: $($mcp_result.result.content.text)"
+    # Can still submit this to harness for error handling
+}
+```
+
+**Recovery:** Check error message. Ensure request is valid JSON-RPC.
+
+---
+
+## Complete Example: Call retrieve_memory_by_chunks
+
+```powershell
+# 1. Get harness response with MCP request
+$session = .\harness\invoke-harness-control-plane.ps1 get-next-step -SessionId $sid
+$mcp_request = $session.payload.request
+
+# 2. Build JSON-RPC envelope
+$jsonRpcBody = @{
+    jsonrpc = "2.0"
+    id = 1
+    method = "tools/call"
+    params = @{
+        name = "retrieve_memory_by_chunks"
+        arguments = $mcp_request
+    }
+} | ConvertTo-Json -Depth 20
+
+# 3. Call MCP server
+$response = Invoke-WebRequest `
+    -Uri "http://127.0.0.1:5081/" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Headers @{ "Accept" = "application/json, text/event-stream" } `
+    -Body $jsonRpcBody `
+    -UseBasicParsing `
+    -TimeoutSec 30
+
+# 4. Parse SSE response
+$raw = $response.Content
+$dataLine = ($raw -split "`n") | Where-Object { $_ -match "^data:" } | Select-Object -First 1
+$json = $dataLine -replace "^data:\s*", ""
+$mcp_response = $json | ConvertFrom-Json
+
+# 5. Save and submit
+$mcp_response | ConvertTo-Json -Depth 30 | Out-File "mcp_response.json"
+
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId $sid `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "MCP.RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_response.json"
+```
+
+---
+
+## Validation Checklist
+
+Before submitting MCP response to harness:
+
+✅ Response contains valid JSON
+✅ Has required `task_id` field
+✅ Has `chunk_results` or equivalent (varies by tool)
+✅ All items have `knowledge_item_id`, `title`, `summary`
+✅ For merge responses: all 7 buckets present (even if empty)
+✅ No extra unknown fields that conflict with schema
+
+---
+
+**Created:** 2026-04-16
+**For:** Agents calling MCP tools during harness planning stages 4-6
+**Status:** Complete guide with examples and error handling
