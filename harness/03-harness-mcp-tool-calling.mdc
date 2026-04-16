@@ -266,7 +266,10 @@ The harness builds `payload.request` for you — pass it directly without modifi
 
 Called at stage `need_mcp_retrieve_memory_by_chunks`.
 
-**Harness provides `payload.request` exactly like this — do NOT modify:**
+**How to call it:**
+```
+retrieve_memory_by_chunks(payload.request)
+```
 
 **Full parameter shape (`payload.request`):**
 

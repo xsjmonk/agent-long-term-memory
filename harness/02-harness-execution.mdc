@@ -1,0 +1,279 @@
+---
+description: Harness execution skill. Applies only after an accepted WorkerExecutionPacket. Constrains the execution agent to follow the plan exactly — no independent memory retrieval, no replanning, no scope expansion, no architecture reinterpretation.
+globs:
+alwaysApply: false
+---
+
+# Harness Execution Skill
+
+## Generic-Agent Note
+
+This skill applies to **any generic agent** — Claude, Cursor, or any other execution-capable agent. It governs only the execution phase — after harness returns `stage: complete` and the user requests implementation work. It is not active during planning mode.
+
+---
+
+## Prerequisites
+
+This skill applies ONLY when:
+1. Harness returned `stage: complete` during planning
+2. The user has provided an accepted `WorkerExecutionPacket`
+3. The user is requesting implementation or execution work
+
+---
+
+## Handoff Contract: Planning → Execution
+
+Planning and execution are separate, non-overlapping phases. The `WorkerExecutionPacket` is the **complete and final contract** for the execution phase.
+
+| Contract Element | Planning Phase | Execution Phase |
+|---|---|---|
+| Who controls the sequence | Harness (state machine) | `WorkerExecutionPacket` |
+| Long-term memory retrieval | Harness-directed MCP calls only | **FORBIDDEN** |
+| Plan generation / replanning | Agent (harness-controlled) | **FORBIDDEN** unless user explicitly asks |
+| Architecture decisions | Fixed in `RequirementIntent` | **FORBIDDEN** to reinterpret |
+| Scope | Fixed in `RequirementIntent` | **FORBIDDEN** to expand |
+| Harness invocation | Mandatory | NOT needed |
+| Implementation work | **FORBIDDEN** | Mandatory |
+
+The `WorkerExecutionPacket` was validated and accepted by the harness. No further negotiation, expansion, or reinterpretation is allowed.
+
+---
+
+## Worker Packet Is Authoritative
+
+The `WorkerExecutionPacket` is the sole authority for what to do during execution.
+
+1. The `WorkerExecutionPacket` is complete — it contains all necessary context from MCP retrieval stages completed during planning
+2. No supplementary memory retrieval is needed or allowed
+3. Execution must NOT re-enter planning mode unless the user explicitly asks for replanning
+4. If replanning is needed: stop execution and start a new harness session from Stage 1
+
+---
+
+## No Independent Long-Term Memory Retrieval
+
+### DO NOT Retrieve Long-Term Memory Independently
+
+The `WorkerExecutionPacket` already contains all necessary memory context from earlier MCP retrieval stages completed during planning.
+
+- DO NOT retrieve long-term memory during execution
+- DO NOT call MCP memory tools during execution
+- DO NOT query long-term memory independently for context
+- The `execution_rules` array explicitly prohibits this — respect it
+
+**This is a HARD prohibition. Breaking it is forbidden by design.**
+
+---
+
+## No Replanning
+
+### DO NOT Replan or Replace the Plan
+
+The `ExecutionPlan` was validated by harness.
+
+- DO NOT modify the plan
+- DO NOT generate a replacement plan
+- DO NOT skip steps
+- DO NOT add steps not in the packet
+- DO NOT reorder steps
+- DO NOT replan unless the user explicitly asks
+
+If the user explicitly asks to replan: stop execution and start a new harness session.
+
+---
+
+## No Architecture Reinterpretation
+
+The task scope was fixed in `RequirementIntent` during planning.
+
+- DO NOT change component structure
+- DO NOT modify the architectural approach
+- DO NOT assume "there is a better way"
+- DO NOT refactor code outside the plan scope
+
+If the plan conflicts with repo reality: report the mismatch instead of silently rewriting the plan. Stop and describe the conflict clearly. Do NOT proceed by reinterpreting the architecture.
+
+---
+
+## No Scope Expansion
+
+The steps define the complete execution scope.
+
+- DO NOT add features not listed in `deliverables`
+- DO NOT extend beyond the plan
+- DO NOT include "nice to have" improvements
+- DO NOT touch `forbidden_actions` areas
+
+---
+
+## Required Output Sections — JSON Schema
+
+Produce exactly these sections in execution output. Use this JSON schema:
+
+### Complete Execution Output Schema
+
+```json
+{
+  "execution_id": "unique identifier for this execution run",
+  "worker_packet_id": "worker_id from the WorkerExecutionPacket",
+  "task_description": "the task being executed",
+  "per_step_results": [
+    {
+      "step_number": 1,
+      "step_title": "Step title from ExecutionPlan",
+      "actions_performed": [
+        "Action 1 that was completed",
+        "Action 2 that was completed"
+      ],
+      "outputs_produced": [
+        "Output file 1: path and description",
+        "Output file 2: path and description"
+      ],
+      "pass": true,
+      "failures": [],
+      "notes": "Any relevant notes about this step"
+    }
+  ],
+  "final_deliverables": [
+    {
+      "deliverable_name": "Name from ExecutionPlan",
+      "deliverable_type": "code|test|config|document|etc",
+      "location": "path/to/deliverable",
+      "status": "completed|partial|failed"
+    }
+  ],
+  "validation_summary": {
+    "total_acceptance_checks": 5,
+    "passed": 5,
+    "failed": 0,
+    "details": [
+      {
+        "step_number": 1,
+        "acceptance_check": "Unit tests pass",
+        "passed": true,
+        "evidence": "All 20 tests passed"
+      }
+    ]
+  },
+  "constraints_honored": [
+    "Constraint 1: verified ✓",
+    "Constraint 2: verified ✓"
+  ],
+  "forbidden_actions_avoided": [
+    "Forbidden action 1: avoided ✓",
+    "Forbidden action 2: avoided ✓"
+  ],
+  "assumptions_made": [
+    "Assumption 1: reason"
+  ],
+  "unresolved_issues": [
+    "Issue 1: description and why it is unresolved"
+  ],
+  "overall_status": "success|partial|failed"
+}
+```
+
+### Schema Explanation
+
+**per_step_results** — One entry per step from ExecutionPlan, in order:
+- `step_number`: 1, 2, 3, ...
+- `step_title`: Copy from ExecutionPlan step
+- `actions_performed`: List of concrete actions taken
+- `outputs_produced`: List of files/artifacts created
+- `pass`: true/false
+- `failures`: Array of failure messages (empty if pass=true)
+- `notes`: Any relevant context
+
+**final_deliverables** — Must match all deliverables from ExecutionPlan:
+- `deliverable_name`: Name from ExecutionPlan
+- `deliverable_type`: code, test, config, document, etc.
+- `location`: File path where it exists
+- `status`: completed, partial, or failed
+
+**validation_summary** — Results of acceptance checks:
+- `total_acceptance_checks`: Count
+- `passed`: How many passed
+- `failed`: How many failed
+- `details`: Array with one entry per acceptance check, including evidence
+
+**constraints_honored** / **forbidden_actions_avoided** — Explicit verification:
+- List each constraint from WorkerExecutionPacket
+- List each forbidden action from WorkerExecutionPacket
+- Mark each as verified with checkmark
+
+**assumptions_made** — Any assumptions during execution:
+- State clearly what you assumed and why
+- Do not hide assumptions
+
+**unresolved_issues** — Any unresolved problems:
+- Describe each issue
+- Explain why it could not be resolved
+- Do not pretend issues do not exist
+
+**overall_status** — Final outcome:
+- `success`: All steps completed, all checks passed
+- `partial`: Some steps completed, some checks failed
+- `failed`: Execution could not complete
+
+---
+
+## Reporting Requirements
+
+### Report Assumptions
+Report assumptions made during execution. Do not hide them.
+
+### Report Unresolved Issues
+Report unresolved issues clearly rather than guessing. Stop and describe what is needed.
+
+### Report Scope Conflicts
+If execution reveals a fundamental scope mismatch that makes the `WorkerExecutionPacket` impossible to follow:
+1. Stop execution
+2. Describe the mismatch precisely
+3. Inform the user — do NOT silently rewrite the plan
+
+---
+
+## MUST / MUST NOT Summary
+
+### MUST Do
+- Execute steps exactly as specified in the `WorkerExecutionPacket`
+- Follow step order — Steps 1, 2, 3... in sequence
+- Produce all required output sections (`per_step_results`, `final_deliverables`, `validation_summary`)
+- Preserve all `hard_constraints`
+- Honor all `forbidden_actions`
+- Report assumptions and unresolved issues
+
+### MUST NOT Do
+- DO NOT Retrieve long-term memory or call MCP independently — this is forbidden by design
+- DO NOT replan, modify the plan, or add steps
+- DO NOT reinterpret architecture
+- DO NOT expand scope
+- DO NOT touch `forbidden_actions` areas
+- DO NOT do replan unless the user explicitly asks
+
+---
+
+## Summary — Execution Agent Is Constrained
+
+The execution agent is a constrained automaton:
+- Use ONLY the accepted `WorkerExecutionPacket`
+- DO NOT Retrieve long-term memory or call MCP independently — this is forbidden by design
+- DO NOT replan or modify the plan — do not replan
+- DO NOT reinterpret architecture or expand scope
+- Report assumptions, unresolved issues, and scope conflicts rather than guessing
+- Honor all `hard_constraints` and `forbidden_actions`
+
+The constraint is intentional. The planning phase (with MCP-backed memory retrieval) already produced the optimal plan. The execution agent's job is to execute it faithfully, not to second-guess it.
+
+---
+
+## Triggering Replanning
+
+Execution must NOT re-enter planning mode unless:
+1. The user explicitly asks for replanning (e.g., "let's re-plan this" or "go back to planning mode")
+2. Execution reveals a fundamental scope mismatch that makes the `WorkerExecutionPacket` impossible to follow
+
+When replanning is triggered:
+- Stop execution immediately
+- Inform the user why replanning is necessary
+- Start a new harness session from Stage 1 with `start-session`

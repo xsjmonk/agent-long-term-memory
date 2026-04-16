@@ -99,6 +99,309 @@ The harness enforces exactly this stage sequence. Each stage has ONE allowed act
 
 ---
 
+## Artifact Schemas — Exact JSON Structure for Each Stage
+
+**CRITICAL:** All artifact JSON files MUST use snake_case field names. Use these schemas exactly as shown.
+
+### Stage 1: RequirementIntent (Action: `agent_generate_requirement_intent`)
+
+**When:** Harness returns `stage: need_requirement_intent`
+
+**Output file:** `requirement_intent.json`
+
+**Exact schema:**
+```json
+{
+  "task_id": "unique-identifier-for-this-task",
+  "task_type": "implementation|refactor|bugfix|feature|migration|debugging",
+  "goal": "Clear, concise statement of what the task achieves",
+  "hard_constraints": [
+    "Constraint 1: e.g., must not break existing API",
+    "Constraint 2: e.g., must complete by deadline"
+  ],
+  "risk_signals": [
+    "Risk 1: e.g., changes touch auth layer",
+    "Risk 2: e.g., requires database migration"
+  ],
+  "complexity": "low|medium|high"
+}
+```
+
+**Call to submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_requirement_intent" `
+    -ArtifactType "RequirementIntent" `
+    -ArtifactFile "requirement_intent.json"
+```
+
+---
+
+### Stage 2: RetrievalChunkSet (Action: `agent_generate_retrieval_chunk_set`)
+
+**When:** Harness returns `stage: need_retrieval_chunk_set`
+
+**Output file:** `retrieval_chunk_set.json`
+
+**Exact schema:**
+```json
+{
+  "chunk_queries": [
+    {
+      "semantic_intent": "Description of what you need to retrieve",
+      "keywords": ["keyword1", "keyword2", "keyword3"],
+      "category": "memory|pattern|constraint|reference|architecture"
+    }
+  ]
+}
+```
+
+**Example:**
+```json
+{
+  "chunk_queries": [
+    {
+      "semantic_intent": "Find existing authentication patterns and security constraints",
+      "keywords": ["auth", "session", "security", "token"],
+      "category": "pattern"
+    },
+    {
+      "semantic_intent": "Find database migration precedents and guardrails",
+      "keywords": ["migration", "database", "schema", "downtime"],
+      "category": "constraint"
+    }
+  ]
+}
+```
+
+**Call to submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_retrieval_chunk_set" `
+    -ArtifactType "RetrievalChunkSet" `
+    -ArtifactFile "retrieval_chunk_set.json"
+```
+
+---
+
+### Stage 3: ChunkQualityReport (Action: `agent_validate_chunk_quality`)
+
+**When:** Harness returns `stage: need_retrieval_chunk_validation`
+
+**Output file:** `chunk_quality_report.json`
+
+**Exact schema:**
+```json
+{
+  "validation_summary": "Overall assessment of chunk quality and coverage",
+  "chunk_assessments": [
+    {
+      "chunk_id": "ID from harness retrieval response",
+      "relevance": "high|medium|low",
+      "reason": "Why this relevance rating"
+    }
+  ],
+  "overall_coverage_adequate": true|false,
+  "gaps_identified": [
+    "Gap 1 description if any",
+    "Gap 2 description if any"
+  ]
+}
+```
+
+**Example:**
+```json
+{
+  "validation_summary": "Retrieved chunks adequately cover authentication patterns and migration constraints",
+  "chunk_assessments": [
+    {
+      "chunk_id": "mem-auth-session-001",
+      "relevance": "high",
+      "reason": "Directly addresses session token storage requirement"
+    },
+    {
+      "chunk_id": "mem-db-migration-005",
+      "relevance": "high",
+      "reason": "Precedent for zero-downtime migration approach"
+    }
+  ],
+  "overall_coverage_adequate": true,
+  "gaps_identified": []
+}
+```
+
+**Call to submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_validate_chunk_quality" `
+    -ArtifactType "ChunkQualityReport" `
+    -ArtifactFile "chunk_quality_report.json"
+```
+
+---
+
+### Stage 4-6: MCP Tool Responses (Actions: `agent_call_mcp_*`)
+
+**When:** Harness returns one of:
+- `stage: need_mcp_retrieve_memory_by_chunks` → `nextAction: agent_call_mcp_retrieve_memory_by_chunks`
+- `stage: need_mcp_merge_retrieval_results` → `nextAction: agent_call_mcp_merge_retrieval_results`
+- `stage: need_mcp_build_memory_context_pack` → `nextAction: agent_call_mcp_build_memory_context_pack`
+
+**Procedure:**
+1. Extract `toolName` and `payload.request` from harness response
+2. Call the MCP tool with that exact request (do not modify)
+3. Collect the raw MCP response
+4. Write the RAW MCP response to a temp file
+5. Submit it back via `submit-step-result`
+
+**Call to submit (example for first MCP stage):**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_call_mcp_retrieve_memory_by_chunks" `
+    -ArtifactType "MCP.RetrieveMemoryByChunksResponse" `
+    -ArtifactFile "mcp_response.json"
+```
+
+**Note:** Submit the RAW MCP response JSON exactly as returned by the MCP tool. Do NOT modify, transform, or wrap it.
+
+See `03-harness-mcp-tool-calling.mdc` for detailed MCP calling rules.
+
+---
+
+### Stage 7: ExecutionPlan (Action: `agent_generate_execution_plan`)
+
+**When:** Harness returns `stage: need_execution_plan`
+
+**Output file:** `execution_plan.json`
+
+**Exact schema:**
+```json
+{
+  "overview": "Clear summary of the approach",
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Step title",
+      "description": "What to do and why",
+      "files_affected": ["path/to/file1.ts", "path/to/file2.ts"],
+      "validation": "How to verify this step is correct"
+    }
+  ],
+  "risks": [
+    "Risk 1 and mitigation",
+    "Risk 2 and mitigation"
+  ],
+  "rollback_strategy": "How to safely revert if something breaks"
+}
+```
+
+**Example:**
+```json
+{
+  "overview": "Add user authentication via JWT tokens. Store tokens securely in httpOnly cookies. Implement session validation middleware.",
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Create JWT authentication service",
+      "description": "Implement token generation and validation logic. Use RS256 with 24-hour expiry.",
+      "files_affected": ["src/auth/jwt-service.ts", "src/types/auth.ts"],
+      "validation": "Unit tests pass; tokens validate correctly with correct and incorrect signatures"
+    },
+    {
+      "step_number": 2,
+      "title": "Add authentication middleware",
+      "description": "Extract token from httpOnly cookie, validate, attach user to request context",
+      "files_affected": ["src/middleware/auth.ts"],
+      "validation": "Integration test: protected routes reject requests without valid token; accept with valid token"
+    }
+  ],
+  "risks": [
+    "Token expiry could strand users mid-session; mitigation: implement refresh token rotation",
+    "Cookie theft via XSS; mitigation: strict CSP headers and input sanitization (existing)"
+  ],
+  "rollback_strategy": "If middleware breaks auth: revert to previous commit, restart app, no user data affected"
+}
+```
+
+**Call to submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_execution_plan" `
+    -ArtifactType "ExecutionPlan" `
+    -ArtifactFile "execution_plan.json"
+```
+
+---
+
+### Stage 8: WorkerExecutionPacket (Action: `agent_generate_worker_execution_packet`)
+
+**When:** Harness returns `stage: need_worker_execution_packet`
+
+**Output file:** `worker_execution_packet.json`
+
+**Exact schema:**
+```json
+{
+  "worker_id": "unique-id-for-this-packet",
+  "task_description": "What the worker must implement",
+  "execution_plan_summary": "Brief ref to the execution plan",
+  "constraints": [
+    "Constraint 1",
+    "Constraint 2"
+  ],
+  "forbidden_actions": [
+    "Never do X because Y",
+    "Never do Z because A"
+  ],
+  "success_criteria": [
+    "Criterion 1",
+    "Criterion 2"
+  ]
+}
+```
+
+**Example:**
+```json
+{
+  "worker_id": "auth-feature-001",
+  "task_description": "Implement JWT authentication with httpOnly cookies. Add auth middleware to protect routes.",
+  "execution_plan_summary": "Create JWT service, add middleware, add login/logout endpoints",
+  "constraints": [
+    "Must use RS256 algorithm",
+    "Tokens expire in 24 hours",
+    "Must not break existing API responses",
+    "Deployment requires 0 downtime"
+  ],
+  "forbidden_actions": [
+    "Never store tokens in localStorage (XSS vulnerability)",
+    "Never skip CSRF protection on logout",
+    "Never hardcode secret keys (use environment variables)"
+  ],
+  "success_criteria": [
+    "Unit tests: all token tests pass",
+    "Integration tests: protected routes work correctly",
+    "Manual test: can login, access protected route, logout",
+    "No breaking changes to existing API"
+  ]
+}
+```
+
+**Call to submit:**
+```powershell
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId>" `
+    -Action "agent_generate_worker_execution_packet" `
+    -ArtifactType "WorkerExecutionPacket" `
+    -ArtifactFile "worker_execution_packet.json"
+```
+
+---
+
 ## MCP Stage Behavior
 
 When harness `nextAction` is one of the three MCP actions:
@@ -218,6 +521,32 @@ MUST use `Scripts\invoke-harness-control-plane.ps1` as the only entrypoint.
 MUST follow the canonical stage sequence without deviation.
 MUST submit every artifact through `submit-step-result` before proceeding.
 MUST stop and resolve errors before continuing.
+
+---
+
+## Quick Reference — Calling Pattern
+
+Every artifact submission follows this exact pattern:
+
+```powershell
+# 1. Prepare: Write artifact JSON to a file using exact schema (see above)
+# 2. Submit: Use this command pattern
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "<sessionId from start-session>" `
+    -Action "<nextAction from harness response>" `
+    -ArtifactType "<artifactType from harness response>" `
+    -ArtifactFile "<path-to-your-json-file>"
+
+# 3. Repeat: Read harness response, extract nextAction, repeat
+```
+
+**Key Points:**
+- **Always use PowerShell syntax**: `-SessionId`, not `--session-id`
+- **Always use snake_case in JSON**: `task_id`, not `taskId`
+- **Always write to temp file first**: artifact must exist on disk before calling `submit-step-result`
+- **Always read nextAction from response**: do not guess the next stage
+- **Always use exact schema**: copy the examples above, fill in your values
+- **MCP responses**: submit the raw response from the MCP tool, do not modify
 
 ---
 
