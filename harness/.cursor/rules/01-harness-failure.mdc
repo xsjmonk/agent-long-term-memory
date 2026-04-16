@@ -1,27 +1,27 @@
 ---
-description: Harness failure handling skill. Production-grade hard-stop failure playbook for generic agents. Mandatory on any harness error condition. Distinguishes validation failures, MCP failures, and wrapper failures.
+description: Harness failure handling skill. Hard-stop failure playbook for any generic agent. Mandatory on any harness error. Distinguishes all four failure types and prohibits repair by guessing or free-form fallback.
 globs:
 alwaysApply: false
 ---
 
 # Harness Failure Handling Skill — Hard-Stop Playbook
 
-This is a **production-grade failure playbook** for any **generic agent**. It governs the only valid response when harness returns an error condition.
+## Generic-Agent Note
+
+This skill applies to **any generic agent** — Claude, Cursor, or any other planning-capable agent. It is mandatory whenever harness returns an error condition, regardless of which agent is running or what stage the session is at.
 
 ---
 
-## When This Skill Is Mandatory
+## Hard Stop Principle
 
-MANDATORY when harness returns ANY of:
+### ON HARNESS ERROR: STOP IMMEDIATELY
+
+This is not a suggestion. This is MANDATORY.
+
+HARD STOP — STOP ALL PLANNING ACTIVITY IMMEDIATELY when harness returns any of:
 - `"success": false`
 - `"stage": "error"`
 - `"nextAction": "stop_with_error"`
-
----
-
-## HARD STOP — STOP IMMEDIATELY
-
-### ON HARNESS ERROR: STOP ALL PLANNING ACTIVITY IMMEDIATELY
 
 MUST:
 1. **STOP all planning activity immediately**
@@ -29,65 +29,63 @@ MUST:
 3. **DO NOT degrade** to free-form planning or speculation
 4. **DO NOT generate** alternative artifacts outside the harness flow
 5. **DO NOT call MCP** without harness instruction
-6. **DO NOT skip** the failing stage
-7. **DO NOT bypass** harness validation
-8. **DO NOT repair by guessing** — fix only what the errors array explicitly identifies
-
-This is NOT optional. This is NOT a suggestion. This is MANDATORY.
+6. **DO NOT repair by guessing** — fix only what the errors array explicitly identifies
+7. **DO NOT infer the next stage without asking the harness**
+8. **DO NOT continue with free-form planning** under any circumstances
 
 ---
 
 ## Hard-Stop Checklist
 
-When harness returns an error, verify each item before doing anything else:
+Verify every item before acting after a harness error:
 
 - [ ] Have you stopped all planning activity?
 - [ ] Have you read the `errors` array from the harness response verbatim?
 - [ ] Have you surfaced the errors to the user exactly as returned?
 - [ ] Have you identified which artifact type and which field failed?
-- [ ] Have you fixed ONLY the identified fields (not earlier accepted artifacts)?
-- [ ] Have you resubmitted to harness via `submit-step-result` (not continued without resubmission)?
+- [ ] Have you fixed ONLY the identified fields?
+- [ ] Have you resubmitted via `submit-step-result` using the SAME session ID?
 - [ ] Have you confirmed whether the session is recoverable or must be cancelled?
 
 ---
 
-## Three Categories of Failure
+## Failure Categories
 
 ### 1. Harness Validation Failure
 
-**What it is**: Harness rejected the submitted artifact because it did not match the canonical schema.
+**What it is**: Harness rejected the submitted artifact because it does not match the canonical schema.
 
-**How to identify**: Response has `success: false`, `stage: error`, and `errors` array contains field-level messages such as "task_id is required" or "chunk_results array is required".
+**How to identify**: Response has `success: false`, `stage: error`, and `errors` array contains field-level messages.
 
-**What to surface to the user**:
+**What to surface**:
 ```
 HARNESS BLOCKED — Validation Failure:
 - [error message 1, verbatim]
 - [error message 2, verbatim]
-Stage: [stage name from response]
-Action: [completedAction that was submitted]
+Stage: [stage name]
+Action: [completedAction submitted]
 ```
 
 **What to do**:
-1. Re-open the failing artifact file
+1. Re-open the failing artifact
 2. Fix ONLY the fields named in the errors array
 3. DO NOT regenerate artifacts from earlier stages
-4. DO NOT change artifacts that harness already accepted
-5. DO NOT repair by guessing — use only what the errors array says
-6. Resubmit with the corrected artifact using the SAME session ID and SAME action name
+4. DO NOT repair by guessing — use only what the errors array says
+5. Resubmit with corrected artifact using the SAME session ID and SAME action name
+
+---
 
 ### 2. MCP Tool Call Failure
 
-**What it is**: The MCP tool call itself failed — the tool returned an error or did not respond. This is different from harness validation failure.
+**What it is**: The MCP tool call itself failed — the tool returned an error or did not respond.
 
-**How to identify**: The MCP tool response contains an error, an exception, or no valid response at all. The harness stage has not been submitted yet.
+**How to identify**: MCP tool response contains an error or no valid response. The harness stage has not been submitted yet.
 
-**What to surface to the user**:
+**What to surface**:
 ```
 MCP CALL FAILED:
-Tool: [toolName from harness nextAction response]
+Tool: [toolName]
 Error: [MCP error message, verbatim]
-Action required: Resolve the MCP tool error before resubmitting this stage.
 ```
 
 **What to do**:
@@ -95,35 +93,55 @@ Action required: Resolve the MCP tool error before resubmitting this stage.
 2. DO NOT fabricate a success response
 3. DO NOT retry the MCP call automatically
 4. DO NOT switch to a non-MCP alternative
-5. Wait for user instruction or resolve the MCP issue before retrying the stage
+5. Wait for user instruction before retrying
+
+---
 
 ### 3. Wrapper / Executable Invocation Failure
 
 **What it is**: `Scripts\invoke-harness-control-plane.ps1` failed to find or invoke the harness executable.
 
-**How to identify**: PowerShell exits with a non-zero code, or the error message mentions "executable not found", "HARNESS_EXE_PATH not set", or "build the project".
+**How to identify**: PowerShell exits with non-zero code, or error mentions "executable not found" or "HARNESS_EXE_PATH not set".
 
-**What to surface to the user**:
+**What to surface**:
 ```
 HARNESS INVOCATION FAILED:
 [error message from wrapper, verbatim]
-Likely cause: harness executable not found or not built.
-Fix: Run `dotnet build src/HarnessMcp.ControlPlane` or set the HARNESS_EXE_PATH environment variable.
+Fix: Run `dotnet build src/HarnessMcp.ControlPlane` or set HARNESS_EXE_PATH.
 ```
 
 **What to do**:
-1. Report the invocation error to the user verbatim
-2. Suggest building the project if the executable is missing
-3. DO NOT attempt to continue planning without a working harness
-4. DO NOT fall back to free-form planning
+1. Report the invocation error verbatim
+2. DO NOT attempt to continue planning without a working harness
+3. DO NOT fall back to free-form planning
 
 ---
 
-## Required Error Handling Steps (Harness Validation Failure)
+### 4. Session Resume / State Mismatch Failure
 
-### Step 1: Parse the Error Response
+**What it is**: The agent attempts to resume a session that is in error state, cancelled, or mismatches the expected stage — or the agent submits an action that doesn't match the current stage.
 
-Read EXACTLY this structure from the harness response:
+**How to identify**: Harness returns:
+- "Session is in error state"
+- "Session has been cancelled"
+- "Session not found"
+- `"Expected action 'X', got 'Y'"` (stage mismatch)
+
+**What to surface**:
+```
+SESSION MISMATCH / STATE ERROR:
+[error message from harness, verbatim]
+Session ID: [sessionId]
+```
+
+---
+
+## Required Response
+
+When harness returns `success: false`:
+
+### Step 1: Parse the Error
+Read exactly:
 ```json
 {
   "success": false,
@@ -134,149 +152,98 @@ Read EXACTLY this structure from the harness response:
 ```
 
 ### Step 2: Surface Errors Verbatim
+Show the user EXACTLY what harness returned. DO NOT paraphrase. DO NOT interpret.
 
-Show the user EXACTLY what harness returned:
-```
-HARNESS BLOCKED:
-- error message 1
-- error message 2
-```
-
-DO NOT paraphrase. DO NOT interpret. Show harness errors exactly as-is.
-
-### Step 3: Identify the Problem
-
-From the `errors` array, identify:
-1. Which field is missing or wrong
-2. Which artifact type failed validation
-3. Which stage was submitting that artifact
-
-### Step 4: Fix ONLY the Failing Artifact
-
+### Step 3: Fix ONLY the Failing Artifact
 1. Re-open the artifact file from the failed stage
 2. Fix ONLY the fields identified in the errors array
-3. DO NOT regenerate artifacts from earlier stages
+3. DO NOT repair by guessing — only fix what the errors array explicitly names
 4. DO NOT change artifacts that harness already accepted
-5. DO NOT repair by guessing — only fix what the errors array explicitly names
 
-### Step 5: Resubmit the Same Stage
-
-Call harness `submit-step-result` with:
-- The SAME action that failed
-- The corrected artifact
-- The SAME session ID
-
-### Step 6: If Still Failing
-
-Repeat Steps 4–5 until errors are resolved or the session is unrecoverable.
+### Step 4: Resubmit the Same Stage
+Call `submit-step-result` with the SAME action, SAME session ID, and corrected artifact.
 
 ---
 
-### 4. Session Resume / State Mismatch Failure
+## Resume And Re-Sync
 
-**What it is**: The agent attempts to resume a session that is in error state, already cancelled, or mismatches the expected stage — or uses a session ID that the harness does not recognize.
+On session mismatch or state uncertainty:
 
-**How to identify**: Harness returns any of:
-- "Session is in error state"
-- "Session has been cancelled"
-- "Session not found"
-- `"Expected action 'X', got 'Y'"` when the agent submits an action that doesn't match the current stage
+1. Call `get-session-status` to inspect the actual current state
+2. If stage is recognizable and non-error: use `get-next-step` to re-sync and continue
+3. If session is in error state: fix the failing artifact and resubmit the same stage
+4. If unrecoverable (cancelled, not found): call `cancel-session` then start a new session
 
-**What to surface to the user**:
-```
-SESSION MISMATCH / STATE ERROR:
-[error message from harness, verbatim]
-Session ID: [sessionId used]
+```powershell
+Scripts\invoke-harness-control-plane.ps1 get-session-status --session-id <id>
+Scripts\invoke-harness-control-plane.ps1 get-next-step --session-id <id>
 ```
 
-**What to do**:
-1. Call `get-session-status` to inspect the actual current state of the session
-2. If the session stage is recognizable and non-error: use `get-next-step` to re-sync and continue from the correct stage
-3. If session is in error state: fix the failing artifact and resubmit the same stage (do not advance)
-4. If session is unrecoverable (cancelled, not found, or error state after all fix attempts): call `cancel-session` then start a new session with `start-session`
-5. DO NOT attempt to continue with the wrong action
-6. DO NOT reuse a cancelled session ID
-7. DO NOT blindly retry without calling `get-session-status` first
+DO NOT blindly retry without calling `get-session-status` first.
+DO NOT attempt to continue with the wrong action.
 
 ---
 
-## Session Corruption Rule
+## Forbidden Recovery Behaviors
 
-### When Session is Unrecoverable
+The following are FORBIDDEN — NEVER do any of these after a harness error:
 
-If harness returns errors such as:
-- "Session not found"
-- "Session is in error state"
-- "Session has been cancelled"
+NEVER silently degrade to free-form planning.
+NEVER continue to the next stage without harness approval.
+NEVER skip the failed artifact.
+NEVER generate artifacts outside the harness flow.
+NEVER call MCP without harness instruction.
+NEVER repair by guessing — only fix what the errors array explicitly names.
+NEVER pretend errors do not exist.
+NEVER infer the next stage without asking the harness.
+NEVER reuse a cancelled session ID.
 
-Then:
-1. Call `cancel-session` to mark the corrupted session
-2. Start a NEW session with `start-session`
-3. Begin from Stage 1 again
-4. DO NOT reuse the corrupted session ID
-
----
-
-## NEVER Do ANY of These
-
-### NEVER silently degrade to:
-- Free-form agent planning
-- Ignoring harness errors
-- Continuing without harness approval
-- Manual artifact replacement outside harness
-- Bypassing validation
-- Acting as if harness returned success
-
-### NEVER do after harness error:
-- Continue to the next stage
-- Skip the failed artifact
-- Generate new artifacts not submitted through harness
-- Call MCP without harness instruction
-- Show the user a plan created outside the harness flow
-- **Repair by guessing** — only fix what the errors array explicitly names
-- Invent a "corrected" artifact by inference without reading the errors array
+FORBIDDEN: free-form planning as a fallback.
+FORBIDDEN: repair by guessing — always use the errors array.
+FORBIDDEN: skipping error resolution to continue the loop.
+FORBIDDEN: continuing with free-form planning after any harness error.
 
 ---
 
-## Common Error Categories and Fixes
+## Examples
 
-### Validation Errors
+### Example 1: Validation Failure — Missing Field
 
-| Error | Fix |
-|-------|-----|
-| "missing required field: goal" | Add non-empty `goal` field |
-| "task_id is required" | Add non-empty `task_id` field |
-| "complexity must be one of: low, medium, high" | Use exactly `low`, `medium`, or `high` |
-| "use 'chunk_results' field name, not 'results'" | Rename `results` to `chunk_results` |
-| "each chunk must have chunk_id" | Add `chunk_id` to each chunk |
-| "duplicate chunk_id: X" | Make each `chunk_id` unique |
-| "constraints array is required" | Add `constraints` array with at least one entry |
-| "forbidden_actions is required" | Add `forbidden_actions` array with at least one entry |
-| "execution_rules must explicitly prohibit memory retrieval" | Add explicit prohibition in `execution_rules` |
+```
+Harness returns:
+  success: false
+  stage: error
+  errors: ["task_id is required", "complexity must be one of: low, medium, high"]
 
-### Stage Order Errors
+Agent must:
+  STOP IMMEDIATELY
+  Show: "HARNESS BLOCKED — task_id is required; complexity must be one of: low, medium, high"
+  Fix ONLY task_id and complexity in the artifact
+  Resubmit the same stage with the corrected artifact
+  Do NOT proceed to the next stage
+  Do NOT repair by guessing — use only what the errors array says
+```
 
-| Error | Fix |
-|-------|-----|
-| "Expected action 'X', got 'Y'" | Wait for harness `nextAction`, do not submit ahead of schedule |
-| "Session is in error state" | Fix the failing artifact or restart session |
+### Example 2: Stage Mismatch
 
-### MCP Errors
+```
+Agent submits agent_generate_retrieval_chunk_set at stage need_requirement_intent.
+Harness returns: "Expected action 'agent_generate_requirement_intent', got 'agent_generate_retrieval_chunk_set'"
 
-| Error | Fix |
-|-------|-----|
-| "unknown bucket 'X' in results" | Use only canonical bucket names from harness |
-| "chunk_results array is required" | Submit the full MCP response, not a summary |
+Agent must:
+  STOP IMMEDIATELY
+  Call get-session-status to verify the current stage
+  Call get-next-step to re-sync
+  Submit the correct action for the current stage
+  Do NOT infer the next stage without asking the harness
+```
 
----
-
-## Recovery Is NOT
+### Example 3: What Recovery Is NOT
 
 Recovery is NOT:
 - Switching to free-form planning
 - Skipping stages
 - Generating artifacts outside the harness flow
 - Calling MCP without harness instruction
-- Pretending errors do not exist
-- Making up a "fixed" artifact without resubmitting it through harness
-- Guessing what the correct artifact should look like without reading the errors array
+- Making up a "fixed" artifact without reading the errors array
+- Continuing with free-form planning when harness is unavailable

@@ -1,109 +1,169 @@
 ---
-description: Primary harness control-plane planning skill. Production-grade operational runbook for generic agents. Mandatory harness-first planning loop for any non-trivial design, implementation, refactor, or debugging task.
+description: Primary harness control-plane skill. Operational runbook for any generic agent. Mandatory harness-first planning loop for any non-trivial design, implementation, refactor, migration, or debugging task.
 globs:
 alwaysApply: false
 ---
 
 # Harness Control-Plane Planning Skill
 
-## Applies To
+## Generic-Agent Note
 
-This is a **production-grade operational runbook** for any **generic agent** — Claude, Cursor, or any other planning-capable agent. It is not tied to any specific product or tool.
-
-When the activation skill (`04-harness-skill-activation.mdc`) determines planning intent is present, this runbook is **mandatory**.
+This skill applies to **any generic agent** — Claude, Cursor, or any other planning-capable agent. It is not tied to any specific model or product. When the activation skill (`04-harness-skill-activation.mdc`) determines that planning mode is active, this runbook is **mandatory** for all agents equally.
 
 ---
 
-## Mandatory Rule 1: Use Only the Canonical Harness Entrypoint
+## When This Skill Governs
 
-The ONLY valid harness entrypoint for planning mode is:
+This skill is mandatory when:
+- `04-harness-skill-activation.mdc` detects semantic planning intent in the user's request
+- The agent enters plan mode for a non-trivial task
 
-```
-Scripts\invoke-harness-control-plane.ps1
-```
-
-NEVER use:
-- Direct invocation of the harness executable
-- Old planner commands or legacy entrypoints
-- Any undocumented or alternative path
-- Any bypassed or shortcut invocation
-
-This is an absolute requirement. Any entrypoint other than `Scripts\invoke-harness-control-plane.ps1` is invalid.
+This skill governs until harness returns `stage: complete` or `stage: error`.
 
 ---
 
-## Operational Planning Loop (Procedure)
+## Core Rule
+
+**The harness is the only planning control plane.**
+
+ALWAYS start the harness loop before producing any planning artifact. ALWAYS call `start-session` as the first action. NEVER produce planning artifacts without harness instruction. NEVER bypass the harness control-plane for any reason.
+
+---
+
+## Mandatory Harness Loop
 
 Execute these steps in exact order. NEVER skip. NEVER batch. NEVER deviate.
 
 1. Call `start-session` to register the task and receive the first required step
 2. Read `nextAction` from the harness response
 3. Perform ONLY the action named in `nextAction`
-4. Persist the produced artifact to a local file
-5. Call `submit-step-result` to submit the artifact and receive the next required step
-6. Repeat Steps 2–5 until `stage == complete` or `nextAction == stop_with_error`
+4. Write the produced artifact to a local temp file
+5. Call `submit-step-result` — submit it back to harness to receive the next required step
+6. Repeat steps 2–5 until `stage == complete` or `nextAction == stop_with_error`
 
 ```powershell
-# Step 1: Start planning session
-Scripts\invoke-harness-control-plane.ps1 start-session --rawTask "<user task here>"
+# Start planning session
+Scripts\invoke-harness-control-plane.ps1 start-session --raw-task "<task>"
 
-# Steps 2–5 loop: perform action, save artifact, submit it back to harness
+# Submit artifact, receive next required action
 Scripts\invoke-harness-control-plane.ps1 submit-step-result `
-  --sessionId <id> `
-  --completedAction <nextAction> `
-  --artifactFile <artifact.json>
+    --session-id <id> `
+    --action <nextAction> `
+    --artifact-type <type> `
+    --artifact-file <artifact.json>
 ```
 
 MUST submit it back to harness after every artifact. NEVER proceed to the next stage without harness approval.
 
 ---
 
-## Canonical Stage Table
+## Stage-to-Action Table
 
-The harness enforces exactly this stage sequence. Each stage has ONE allowed action. Any other action is rejected.
+The harness enforces exactly this stage sequence. Each stage has ONE allowed action. Any other action is immediately rejected.
 
-| # | Protocol Stage Name | Only Allowed Action |
-|---|---|---|
-| 1 | `need_requirement_intent` | `agent_generate_requirement_intent` |
-| 2 | `need_retrieval_chunk_set` | `agent_generate_retrieval_chunk_set` |
-| 3 | `need_retrieval_chunk_validation` | `agent_validate_chunk_quality` |
-| 4 | `need_mcp_retrieve_memory_by_chunks` | `agent_call_mcp_retrieve_memory_by_chunks` |
-| 5 | `need_mcp_merge_retrieval_results` | `agent_call_mcp_merge_retrieval_results` |
-| 6 | `need_mcp_build_memory_context_pack` | `agent_call_mcp_build_memory_context_pack` |
-| 7 | `need_execution_plan` | `agent_generate_execution_plan` |
-| 8 | `need_worker_execution_packet` | `agent_generate_worker_execution_packet` |
-| 9 | `complete` | `complete` |
+| Stage | Only Allowed Action |
+|---|---|
+| `need_requirement_intent` | `agent_generate_requirement_intent` |
+| `need_retrieval_chunk_set` | `agent_generate_retrieval_chunk_set` |
+| `need_retrieval_chunk_validation` | `agent_validate_chunk_quality` |
+| `need_mcp_retrieve_memory_by_chunks` | `agent_call_mcp_retrieve_memory_by_chunks` |
+| `need_mcp_merge_retrieval_results` | `agent_call_mcp_merge_retrieval_results` |
+| `need_mcp_build_memory_context_pack` | `agent_call_mcp_build_memory_context_pack` |
+| `need_execution_plan` | `agent_generate_execution_plan` |
+| `need_worker_execution_packet` | `agent_generate_worker_execution_packet` |
+| `complete` | Present result to user |
+| `error` | STOP — see `01-harness-failure.mdc` |
 
 **Any action not listed for the current stage is immediately rejected by the harness.**
 
 ---
 
-## Do-Not-Skip / Do-Not-Batch / Do-Not-Bypass
+## MCP Stage Behavior
 
-| Prohibited Behavior | Rule |
-|---|---|
-| Skipping stages | FORBIDDEN — harness enforces stage order; out-of-order submissions are rejected |
-| Batching multiple artifacts in one call | FORBIDDEN — one action per stage, one submit-step-result per action |
-| Calling MCP without harness instruction | FORBIDDEN — MCP calls allowed only when `nextAction` is a MCP action |
-| Generating ExecutionPlan before stage 7 | FORBIDDEN |
-| Generating WorkerExecutionPacket before stage 8 | FORBIDDEN |
-| Implementation work during planning mode | FORBIDDEN |
-| Continuing after `stop_with_error` | FORBIDDEN |
-| Submitting an artifact without `submit-step-result` | FORBIDDEN |
-| Using any entrypoint other than the canonical wrapper | FORBIDDEN |
-| Invoking old planner runtime or legacy agent client commands | FORBIDDEN |
+When harness `nextAction` is one of the three MCP actions:
+- `agent_call_mcp_retrieve_memory_by_chunks`
+- `agent_call_mcp_merge_retrieval_results`
+- `agent_call_mcp_build_memory_context_pack`
+
+Procedure:
+1. Read `toolName` from the harness response — use it exactly
+2. Use `payload.request` exactly as provided — do not modify it
+3. Call the MCP tool with that exact request
+4. Submit the RAW MCP response back to harness via `submit-step-result`
+
+See `03-harness-mcp-tool-calling.mdc` for exact MCP calling rules.
+
+Do NOT call MCP at any other point during planning.
 
 ---
 
-## When the User Asks for Planning AND Implementation in the Same Message
+## Completion Behavior
 
-Planning mode still runs first. Execution work is FORBIDDEN during planning.
+When harness returns `stage: complete`, extract `completionArtifacts` from the response. Then present to the user as described in "What To Present To The User" below.
 
-**Procedure:**
+---
+
+## Resume Behavior — How To Resume
+
+If the agent loses context during an active session:
+
+```powershell
+# Re-sync current required action
+Scripts\invoke-harness-control-plane.ps1 get-next-step --session-id <id>
+
+# Inspect accepted artifacts and current state
+Scripts\invoke-harness-control-plane.ps1 get-session-status --session-id <id>
+```
+
+Harness returns the current `stage` and required `nextAction`. Resume from there.
+
+NEVER restart the session unless harness returns "Session not found" or the session is in unrecoverable error state.
+
+---
+
+## Forbidden Behaviors — Do-Not-Skip / Do-Not-Batch / Do-Not-Bypass
+
+NEVER skip stages — harness enforces stage order; out-of-order submissions are rejected.
+NEVER batch multiple artifacts in one call — one action per stage, one submit per action.
+NEVER generate `ExecutionPlan` before harness reaches `need_execution_plan`.
+NEVER generate `WorkerExecutionPacket` before harness reaches `need_worker_execution_packet`.
+NEVER call MCP without explicit harness instruction via `nextAction`.
+NEVER continue after `stop_with_error`.
+NEVER do implementation work during planning mode.
+
+FORBIDDEN: any entrypoint other than `Scripts\invoke-harness-control-plane.ps1`.
+FORBIDDEN: generating planning artifacts before harness requests them.
+FORBIDDEN: batching two or more stage artifacts in a single harness interaction.
+FORBIDDEN: bypassing the harness control-plane for any reason.
+FORBIDDEN: presenting unaccepted artifacts to the user.
+FORBIDDEN: MCP calls outside of harness-directed MCP stages.
+FORBIDDEN: continuing the flow after a harness error without resolving it.
+
+---
+
+## What To Present To The User
+
+When harness returns `stage: complete`, present all of the following:
+
+1. **Plan summary** — concise description of what the execution plan achieves
+2. **Memory-derived constraints** — key constraints identified during MCP retrieval stages
+3. **Risks and anti-patterns** — identified risks from memory retrieval; what to avoid
+4. **Next-step recommendation** — whether to proceed to execution, review, or iterate
+5. **Worker packet availability** — state explicitly that the `WorkerExecutionPacket` is ready for handoff to execution mode (`02-harness-execution.mdc`)
+
+NEVER show drafts, partial plans, or artifacts that harness has not accepted.
+NEVER present unverified planning artifacts as finished work.
+
+---
+
+## Planning And Implementation In The Same Message
+
+If the user requests both planning and implementation in the same message, planning runs first. Implementation is FORBIDDEN during planning.
+
 1. Acknowledge both parts of the user's request
 2. Inform the user that planning mode runs first
-3. Execute the full harness planning loop (all 9 stages through `complete`)
-4. Present the accepted `ExecutionPlan` and `WorkerExecutionPacket` to the user
+3. Execute the full harness planning loop through `stage: complete`
+4. Present the accepted `ExecutionPlan` and `WorkerExecutionPacket`
 5. Only AFTER harness returns `stage: complete` may execution work begin — and only if the user requests it
 
 NEVER start writing implementation code during planning mode.
@@ -112,200 +172,37 @@ NEVER skip planning to jump directly to implementation.
 
 ---
 
-## How to Resume
-
-If the agent loses context during an active session, re-sync using:
-
-```powershell
-# Re-sync current step
-Scripts\invoke-harness-control-plane.ps1 get-next-step --sessionId <id>
-
-# Inspect accepted artifacts and session state
-Scripts\invoke-harness-control-plane.ps1 get-session-status --sessionId <id>
-```
-
-The harness returns the current `stage` and required `nextAction`. Resume from there.
-
-NEVER restart the session unless harness returns "Session not found" or "Session is in error state" after exhausting all fix attempts.
-
----
-
-## What to Present to the User at Completion
-
-When harness returns `stage: complete`:
-
-1. Show the accepted `ExecutionPlan` to the user (all steps, constraints, deliverables)
-2. Show the accepted `WorkerExecutionPacket` (execution-ready, self-contained packet)
-3. State explicitly that planning is complete
-4. Offer to hand off to execution mode if the user requests it
-
-NEVER show drafts, partial plans, or artifacts that harness has not accepted.
-NEVER present unverified planning artifacts as finished work.
-
----
-
-## Real-Life Discipline Rules
+## ALWAYS / NEVER / MUST / FORBIDDEN
 
 ### ALWAYS
-
 ALWAYS call `start-session` before producing any planning artifact.
 ALWAYS read `nextAction` from harness before taking any action.
-ALWAYS produce only the artifact type specified in `inputContract.artifactType`.
-ALWAYS persist the artifact to a file before calling `submit-step-result`.
-ALWAYS call `submit-step-result` before moving to the next step.
+ALWAYS call `submit-step-result` after producing each artifact.
 ALWAYS stop immediately when `nextAction == stop_with_error`.
-ALWAYS present only harness-accepted artifacts to the user at completion.
-ALWAYS use `get-next-step` to re-sync if the agent loses context.
-ALWAYS use `get-session-status` to inspect accepted artifacts when resuming.
+ALWAYS use `get-next-step` to re-sync if context is lost.
+ALWAYS use `get-session-status` to inspect state when resuming.
+ALWAYS present only harness-accepted artifacts to the user.
 
 ### NEVER
-
-NEVER produce an artifact that harness has not requested via `nextAction`.
-NEVER call MCP outside of a MCP-stage `nextAction` instruction.
+NEVER produce an artifact harness has not requested via `nextAction`.
+NEVER call MCP outside a MCP-stage `nextAction` instruction.
 NEVER skip stages, even if the content seems obvious.
 NEVER batch more than one artifact into a single harness call.
-NEVER do implementation work (write code, modify files) during planning mode.
-NEVER use old planner runtime commands or legacy agent client entrypoints.
-NEVER show the user a plan that harness has not accepted.
+NEVER do implementation work during planning mode.
+NEVER show the user a plan harness has not accepted.
 NEVER continue the planning loop after `nextAction: stop_with_error`.
 
 ### MUST
-
 MUST use `Scripts\invoke-harness-control-plane.ps1` as the only entrypoint.
-MUST follow the 9-stage canonical sequence without deviation.
-MUST produce only the canonical artifact type requested at each stage.
+MUST follow the canonical stage sequence without deviation.
 MUST submit every artifact through `submit-step-result` before proceeding.
 MUST stop and resolve errors before continuing.
-
-### FORBIDDEN
-
-FORBIDDEN: any harness entrypoint other than `Scripts\invoke-harness-control-plane.ps1`.
-FORBIDDEN: generating `ExecutionPlan` or `WorkerExecutionPacket` before harness requests them.
-FORBIDDEN: presenting unaccepted artifacts to the user.
-FORBIDDEN: MCP calls outside of harness-directed MCP stages.
-FORBIDDEN: batching two or more stage artifacts in a single harness interaction.
-FORBIDDEN: continuing the flow after a harness error without resolving it.
-FORBIDDEN: bypassing the harness control-plane for any reason.
-
----
-
-## Mandatory Rule: Never Generate Artifacts Before Their Stage
-
-Do not generate or produce:
-- `RetrievalChunkSet` before harness reaches `need_retrieval_chunk_set`
-- `ExecutionPlan` before harness reaches `need_execution_plan`
-- `WorkerExecutionPacket` before harness reaches `need_worker_execution_packet`
-
-If you already know what the plan should look like — hold it. Generate only what harness currently requests in `nextAction`.
-
----
-
-## Mandatory Rule: Never Batch Stages
-
-Never submit two or more artifacts in a single harness call. Each stage requires:
-1. One agent action
-2. One `submit-step-result` call
-
-Batching is forbidden.
-
----
-
-## Mandatory Rule: No Execution Work During Planning
-
-The planning session produces `ExecutionPlan` and `WorkerExecutionPacket` only. During planning, do not:
-- Write implementation code
-- Create or modify project files
-- Make actual code changes
-- Run tests or build commands
-- Perform deployment actions
-
----
-
-## Mandatory Rule: Call MCP Only When Harness Instructs
-
-You may call MCP tools only when harness `nextAction` is one of:
-- `agent_call_mcp_retrieve_memory_by_chunks`
-- `agent_call_mcp_merge_retrieval_results`
-- `agent_call_mcp_build_memory_context_pack`
-
-See `03-harness-mcp-tool-calling.mdc` for exact MCP behavior.
-
-Do not call MCP at any other point during planning.
-
----
-
-## Mandatory Rule: Stop Immediately on Harness Error
-
-If harness returns `success: false`, `stage: error`, or `nextAction: stop_with_error`, see `01-harness-failure.mdc`. Do not continue without resolving the error.
-
----
-
-## Artifact Canonical Forms
-
-### RequirementIntent
-```json
-{
-  "task_id": "unique-id",
-  "task_type": "ui-change|backend-change|refactor|bugfix|design|migration",
-  "goal": "what to achieve",
-  "hard_constraints": ["constraint 1"],
-  "risk_signals": ["risk area 1"],
-  "complexity": "low|medium|high"
-}
-```
-
-### RetrievalChunkSet
-```json
-{
-  "task_id": "unique-id",
-  "complexity": "low|medium|high",
-  "chunks": [
-    { "chunk_id": "c1", "chunk_type": "core_task", "text": "..." },
-    { "chunk_id": "c2", "chunk_type": "constraint", "text": "..." }
-  ]
-}
-```
-Chunk types: `core_task`, `constraint`, `risk`, `pattern`, `similar_case`
-
-### ExecutionPlan
-```json
-{
-  "task_id": "unique-id",
-  "task": "what to achieve",
-  "scope": "affected areas and layers",
-  "constraints": ["preserved constraint 1"],
-  "forbidden_actions": ["action not allowed"],
-  "steps": [
-    {
-      "step_number": 1,
-      "title": "Step name",
-      "actions": ["what to do"],
-      "outputs": ["what is produced"],
-      "acceptance_checks": ["how to verify"]
-    }
-  ],
-  "deliverables": ["final output 1"]
-}
-```
-
-### WorkerExecutionPacket
-```json
-{
-  "goal": "what to achieve",
-  "scope": "affected areas and layers",
-  "hard_constraints": ["constraint 1"],
-  "forbidden_actions": ["action not allowed"],
-  "execution_rules": ["Do NOT retrieve long-term memory independently. Do NOT replan."],
-  "steps": [ ... ],
-  "required_output_sections": ["per_step_results", "final_deliverables", "validation_summary"]
-}
-```
 
 ---
 
 ## Related Skills
 
 - `04-harness-skill-activation.mdc` — decides when this skill is active
-- `01-harness-failure.mdc` — mandatory hard-stop behavior on harness errors
-- `03-harness-mcp-tool-calling.mdc` — mandatory MCP stage behavior
+- `01-harness-failure.mdc` — mandatory hard-stop on harness errors
+- `03-harness-mcp-tool-calling.mdc` — exact MCP stage behavior
 - `02-harness-execution.mdc` — execution mode after planning is complete

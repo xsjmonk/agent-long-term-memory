@@ -71,6 +71,65 @@ Verifies that skill files are production-grade operational runbooks, not loose g
 - All 3 MCP stages return correct `toolName` and `payload.request`
 - Out-of-order stage attempts hard-stop; skipping to `complete` hard-stops
 
+### Skill-Driven Loop Integration (`SkillDrivenLoopIntegrationTests`)
+
+Each test provides dual proof: (1) skill file contains correct operational guidance AND (2) harness state machine enforces the corresponding behavior at runtime.
+
+**8 named `SkillDrivenLoop_` tests:**
+- `SkillDrivenLoop_SemanticPlanningIntent_ActivatesHarnessFlow` — skill says semantic, harness runs full loop
+- `SkillDrivenLoop_ExecutionIntent_DoesNotActivatePlanningFlow` — skill has non-activation examples, harness is not the gate
+- `SkillDrivenLoop_HarnessIsOnlyPlanningEntrypoint` — skill uses ALWAYS/MUST/FORBIDDEN, harness controls all transitions
+- `SkillDrivenLoop_CannotSkipStages` — skill has NEVER/do-not-skip, harness hard-stops on out-of-order submits
+- `SkillDrivenLoop_CannotCallMcpBeforeHarnessRequestsIt` — MCP skill prohibits premature MCP, harness rejects it
+- `SkillDrivenLoop_MustSubmitAfterEachStage` — skill requires submit-per-stage, harness rejects re-submission
+- `SkillDrivenLoop_StopsOnInvalidCanonicalArtifact` — failure skill mandates HARD STOP, harness hard-stops on invalid artifacts
+- `SkillDrivenLoop_CompletesOnlyAfterAllCanonicalStagesAccepted` — skill covers all 9 stages, harness enforces all 8 before complete
+
+**5 named skill strength tests:**
+- `ActivationSkill_IsSemanticNotLexicalOnly` — checks "not lexical", "meaning and context", "insufficient", "Detecting the word"
+- `ActivationSkill_IsGenericAgentOriented` — checks Claude, Cursor, "any other planning-capable agent", "same regardless"
+- `PlanningRule_IsOperationalRunbook_NotSoftGuidance` — checks ALWAYS, MUST, FORBIDDEN, NEVER, do-not-skip, what-to-present
+- `FailureRule_RequiresHardStop` — checks HARD STOP, STOP IMMEDIATELY, NEVER, FORBIDDEN, repair-by-guessing, hard-stop-checklist
+- `McpToolRule_RequiresExactToolAndPayloadRequest` — checks EXACTLY, payload.request, all 3 exact tool names, RAW, no-substitutions
+
+### Simulated Agent Loop Tests (`SimulatedAgentLoopTests` + `GenericAgentSimulator`)
+
+Uses the `GenericAgentSimulator` in-memory test helper to prove the combined behavior of skill rules and harness enforcement through a realistic agent loop simulation.
+
+**`GenericAgentSimulator`** — deterministic rule-based simulator that:
+- Classifies planning intent semantically (mirrors 04-harness-skill-activation.mdc)
+- Can run the full 9-stage happy-path loop autonomously
+- Supports targeted stage operations: `SubmitValidArtifact`, `SubmitWrongAction`, `SubmitInvalidArtifact`, `AdvanceTo`, `GetNextStep`, `GetSessionStatus`
+- Provides canonical valid artifact builders for all 8 action types
+
+**6 activation tests:**
+- `SemanticPlanningIntent_WithoutPlanKeyword_ActivatesHarnessLoop` — "how should we approach this refactor?" activates without "plan" keyword
+- `LexicalPlan_InExecutionContext_DoesNotActivate` — "that's the plan — let's do it" is correctly rejected (lexical false positive)
+- `PlanMode_ActivatesHarnessLoop` — "plan mode" always activates
+- `TrivialRename_DoesNotActivate` — trivial rename never activates
+- `LooksGoodProceed_DoesNotActivate` — execution approvals do not activate
+- `MigrationApproach_WithoutPlanKeyword_Activates` — migration/rollout requests activate without "plan"
+
+**6 strict loop enforcement tests:**
+- `WrongStageSubmission_AtStage1_HardStops` — wrong action at stage 1 returns error
+- `WrongArtifactShape_AtRequirementIntentStage_HardStops` — invalid artifact JSON fails at requirement intent stage
+- `WrongMcpTool_SubmittedResult_HardStops` — wrong artifact type for MCP stage fails
+- `ExecutionPlan_SubmittedTooEarly_IsRejected` — execution plan at wrong stage fails
+- `WorkerPacket_SubmittedTooEarly_IsRejected` — worker packet at wrong stage fails
+- `McpBeforeHarnessRequests_IsRejected` — MCP result before harness reaches MCP stage fails
+
+**2 resume/re-sync tests:**
+- `LostContext_Resume_ViaGetNextStep_Succeeds` — get-next-step returns correct stage after mid-loop context loss
+- `LostContext_GetSessionStatus_ReturnsCorrectState` — get-session-status reports correct pending stage
+
+**6 skills+harness proof tests:**
+- `FullLoop_CompletesWithRequiredArtifacts_ViaSimulator` — full 9-stage loop completes via simulator
+- `FreeFormSkip_ToComplete_IsRejected` — skipping to complete without stages fails
+- `HarnessProvides_ExactMcpToolName_ForAgent` — harness returns exact tool name and payload for MCP stages
+- `RawMcpResult_SubmittedToHarness_IsAccepted` — valid MCP response is accepted and advances stage
+- `ErrorState_SessionLocked_CannotContinue` — session in error state rejects further submissions
+- `MultipleSemanticRequests_EachActivatesIndependently` — multiple concurrent sessions are independent
+
 ---
 
 ## Architecture Reminder

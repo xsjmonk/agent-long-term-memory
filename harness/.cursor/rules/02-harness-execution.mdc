@@ -1,12 +1,14 @@
 ---
-description: Harness execution skill. Applies only after an accepted WorkerExecutionPacket. Constrains execution agent to follow the plan exactly without independent memory retrieval, replanning, architecture reinterpretation, or scope expansion.
+description: Harness execution skill. Applies only after an accepted WorkerExecutionPacket. Constrains the execution agent to follow the plan exactly — no independent memory retrieval, no replanning, no scope expansion, no architecture reinterpretation.
 globs:
 alwaysApply: false
 ---
 
 # Harness Execution Skill
 
-This skill applies when the agent is executing implementation work from an accepted `WorkerExecutionPacket`. It constrains the execution agent strictly.
+## Generic-Agent Note
+
+This skill applies to **any generic agent** — Claude, Cursor, or any other execution-capable agent. It governs only the execution phase — after harness returns `stage: complete` and the user requests implementation work. It is not active during planning mode.
 
 ---
 
@@ -35,44 +37,22 @@ Planning and execution are separate, non-overlapping phases. The `WorkerExecutio
 
 The `WorkerExecutionPacket` was validated and accepted by the harness. No further negotiation, expansion, or reinterpretation is allowed.
 
-When execution mode begins:
-1. The `WorkerExecutionPacket` is the sole authority for what to do
-2. Execution must NOT re-enter planning mode unless the user explicitly asks for replanning
-3. If replanning is needed, stop execution and start a new harness session from Stage 1
+---
+
+## Worker Packet Is Authoritative
+
+The `WorkerExecutionPacket` is the sole authority for what to do during execution.
+
+1. The `WorkerExecutionPacket` is complete — it contains all necessary context from MCP retrieval stages completed during planning
+2. No supplementary memory retrieval is needed or allowed
+3. Execution must NOT re-enter planning mode unless the user explicitly asks for replanning
+4. If replanning is needed: stop execution and start a new harness session from Stage 1
 
 ---
 
-## Execution Is SEPARATE from Planning
+## No Independent Long-Term Memory Retrieval
 
-- Planning uses the harness to generate `ExecutionPlan` and `WorkerExecutionPacket`
-- Execution uses the `WorkerExecutionPacket` to perform implementation work
-- The two phases MUST NOT overlap
-- Do NOT run planning stages during execution
-- Do NOT invoke the harness during execution (it is not needed)
-- Do NOT re-enter planning mode mid-execution unless the user explicitly asks for replanning
-
----
-
-## Execution Agent Rules
-
-### MUST Do:
-
-1. **Execute steps exactly as specified** in the `WorkerExecutionPacket` — no modifications
-2. **Follow step order** — do Steps 1, 2, 3... in sequence
-3. **Produce output sections** exactly as required by `required_output_sections`:
-   - `per_step_results` — one entry per step
-   - `final_deliverables` — match deliverables from the plan
-   - `validation_summary` — pass/fail status for each `acceptance_check`
-4. **Preserve `hard_constraints`** from the packet throughout execution
-5. **Honor `forbidden_actions`** — do not touch those areas or components
-6. **Report assumptions** made during execution (do not hide them)
-7. **Report unresolved issues** clearly rather than guessing
-
----
-
-### MUST NOT Do:
-
-#### 1. DO NOT Retrieve Long-Term Memory Independently
+### DO NOT Retrieve Long-Term Memory Independently
 
 The `WorkerExecutionPacket` already contains all necessary memory context from earlier MCP retrieval stages completed during planning.
 
@@ -81,20 +61,28 @@ The `WorkerExecutionPacket` already contains all necessary memory context from e
 - DO NOT query long-term memory independently for context
 - The `execution_rules` array explicitly prohibits this — respect it
 
-**This is a HARD prohibition. Breaking it causes validation failures and is forbidden by design.**
+**This is a HARD prohibition. Breaking it is forbidden by design.**
 
-#### 2. DO NOT Replan or Replace the Plan
+---
 
-The `ExecutionPlan` was already validated by harness.
+## No Replanning
+
+### DO NOT Replan or Replace the Plan
+
+The `ExecutionPlan` was validated by harness.
 
 - DO NOT modify the plan
 - DO NOT generate a replacement plan
 - DO NOT skip steps
 - DO NOT add steps not in the packet
 - DO NOT reorder steps
-- DO NOT re-enter planning mode unless the user explicitly asks
+- DO NOT replan unless the user explicitly asks
 
-#### 3. DO NOT Reinterpret Architecture
+If the user explicitly asks to replan: stop execution and start a new harness session.
+
+---
+
+## No Architecture Reinterpretation
 
 The task scope was fixed in `RequirementIntent` during planning.
 
@@ -103,72 +91,73 @@ The task scope was fixed in `RequirementIntent` during planning.
 - DO NOT assume "there is a better way"
 - DO NOT refactor code outside the plan scope
 
-#### 4. DO NOT Expand Scope
+If the plan conflicts with repo reality: report the mismatch instead of silently rewriting the plan. Stop and describe the conflict clearly. Do NOT proceed by reinterpreting the architecture.
+
+---
+
+## No Scope Expansion
 
 The steps define the complete execution scope.
 
 - DO NOT add features not listed in `deliverables`
 - DO NOT extend beyond the plan
 - DO NOT include "nice to have" improvements
-
-#### 5. DO NOT Touch Forbidden Actions
-
-The `forbidden_actions` section lists entities that must not be touched.
-
-- DO NOT modify those components
-- DO NOT refactor those areas
-- DO NOT add new code to those files
-
----
-
-## When to Re-Enter Planning Mode
-
-Execution must NOT re-enter planning mode unless:
-1. The user EXPLICITLY asks for replanning (e.g., "let's re-plan this" or "go back to planning mode")
-2. Execution reveals a fundamental scope mismatch that makes the `WorkerExecutionPacket` impossible to follow
-
-If re-entry into planning is needed:
-- Stop execution
-- Inform the user why replanning is necessary
-- Start a new harness session from Stage 1
-
----
-
-## Handling Blocks
-
-If execution is blocked by ambiguity or missing information:
-
-1. **STOP** — do not proceed past the block
-2. **DESCRIBE** the block clearly and precisely
-3. **STATE** what information or decision is needed
-4. **REPORT** to the user instead of guessing
-
-DO NOT:
-- Guess at implementation details
-- Make assumptions about requirements
-- "Just do something" to get unblocked
+- DO NOT touch `forbidden_actions` areas
 
 ---
 
 ## Required Output Sections
 
-Produce exactly these sections in your output:
+Produce exactly these sections in execution output:
 
 ### 1. `per_step_results`
-One entry per step containing:
+One entry per step:
 - Step number
 - Actions performed
 - Outputs produced
 - Pass/fail status
 
 ### 2. `final_deliverables`
-Match the deliverables listed in the `ExecutionPlan`:
-- Files created or modified
-- Tests added or modified
-- Documentation updates
+Match the deliverables listed in the `ExecutionPlan`.
 
 ### 3. `validation_summary`
 Pass/fail status for each `acceptance_check` in each step.
+
+---
+
+## Reporting Requirements
+
+### Report Assumptions
+Report assumptions made during execution. Do not hide them.
+
+### Report Unresolved Issues
+Report unresolved issues clearly rather than guessing. Stop and describe what is needed.
+
+### Report Scope Conflicts
+If execution reveals a fundamental scope mismatch that makes the `WorkerExecutionPacket` impossible to follow:
+1. Stop execution
+2. Describe the mismatch precisely
+3. Inform the user — do NOT silently rewrite the plan
+
+---
+
+## MUST / MUST NOT Summary
+
+### MUST Do
+- Execute steps exactly as specified in the `WorkerExecutionPacket`
+- Follow step order — Steps 1, 2, 3... in sequence
+- Produce all required output sections (`per_step_results`, `final_deliverables`, `validation_summary`)
+- Preserve all `hard_constraints`
+- Honor all `forbidden_actions`
+- Report assumptions and unresolved issues
+
+### MUST NOT Do
+- DO NOT Retrieve long-term memory or call MCP independently — this is forbidden by design
+- DO NOT replan, modify the plan, or add steps
+- DO NOT reinterpret architecture
+- DO NOT expand scope
+- DO NOT touch `forbidden_actions` areas
+- DO NOT do replan unless the user explicitly asks
 
 ---
 
@@ -177,7 +166,22 @@ Pass/fail status for each `acceptance_check` in each step.
 The execution agent is a constrained automaton:
 - Use ONLY the accepted `WorkerExecutionPacket`
 - DO NOT Retrieve long-term memory or call MCP independently — this is forbidden by design
-- DO NOT replan or modify the plan
+- DO NOT replan or modify the plan — do not replan
 - DO NOT reinterpret architecture or expand scope
-- Report assumptions and unresolved issues rather than guessing
+- Report assumptions, unresolved issues, and scope conflicts rather than guessing
 - Honor all `hard_constraints` and `forbidden_actions`
+
+The constraint is intentional. The planning phase (with MCP-backed memory retrieval) already produced the optimal plan. The execution agent's job is to execute it faithfully, not to second-guess it.
+
+---
+
+## Triggering Replanning
+
+Execution must NOT re-enter planning mode unless:
+1. The user explicitly asks for replanning (e.g., "let's re-plan this" or "go back to planning mode")
+2. Execution reveals a fundamental scope mismatch that makes the `WorkerExecutionPacket` impossible to follow
+
+When replanning is triggered:
+- Stop execution immediately
+- Inform the user why replanning is necessary
+- Start a new harness session from Stage 1 with `start-session`

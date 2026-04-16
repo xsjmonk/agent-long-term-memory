@@ -6,37 +6,79 @@ alwaysApply: false
 
 # Harness Skill Activation Gate
 
-This skill is the activation gate for the harness planning skill set. It determines whether the harness planning loop (`00-harness-control-plane.mdc`) must be activated for a given task or request.
+## Generic-Agent Note
 
-**This skill applies to any generic agent** — Claude, Cursor, or any other planning-capable agent. Activation rules are the same regardless of which AI system is running.
+This skill applies to **any generic agent** — Claude, Cursor, or any other planning-capable agent. Activation rules are the same regardless of which AI system is running. This skill is not tied to any specific model or product.
 
 ---
 
-## Core Principle: Semantic Activation, Not Lexical Matching
+## Semantic Activation Principle
 
-**Activation MUST NOT rely only on literal keywords like "plan".**
+**Activation is semantic, not lexical.**
+
+The presence or absence of the literal word `plan` is NOT decisive.
 
 Detecting the word "plan" in a message is explicitly a lexical-only check and it is **insufficient** for activation. Lexical-only matching produces false positives (e.g., "that's the plan — let's do it" is execution intent, not planning intent) and false negatives (e.g., "how should we approach this refactor?" is planning intent without using the word "plan").
 
 Instead, infer planning intent from the **meaning and context** of the request:
-- What is the user trying to accomplish?
+- What is the user actually trying to accomplish?
 - Is the task non-trivial enough that plan quality matters?
-- Is the user asking for approach, design, strategy, or decomposition before implementation?
-- Is the agent already in a planning workflow or design context?
+- Is the user asking for approach, strategy, design, or decomposition before implementation?
+- Is the agent already in plan mode, planning mode, or a design context?
 
-If the answer to any of those questions is yes and the task is non-trivial, activate planning mode.
+Activation applies when the user is asking for:
+- **approach** to implement or change something
+- **strategy** or **methodology** for a non-trivial task
+- **design-before-coding** — figure out the approach before writing anything
+- **how-to-implement** or **how-to-proceed** for a complex task
+- **investigation-before-change** — understand the system before modifying it
+- **architecture shaping** — deciding component structure, layers, or patterns
+- **risk-aware implementation** — understanding risk and constraints before acting
+- **decomposition** or **outlining** the steps for a non-trivial task
 
 ---
 
-## Decision Heuristic for Ambiguous Cases
+## When Planning Intent Is Active
 
-For ambiguous or borderline requests, apply this heuristic:
+Planning intent is active when the request semantically belongs to one of these categories:
+
+1. **Approach / Strategy** — "how should we approach this?", "what's the strategy?", "what's the best way to implement X?"
+2. **Design before coding** — "design the implementation steps", "before coding, figure out the right approach", "think through the architecture before we code"
+3. **Decomposition / Outline** — "outline the implementation", "decompose this into steps", "break this down"
+4. **Migration / Rollout planning** — "plan the migration from v1 to v2", "design a rollout for this change", "staged rollout approach", "what would a rollout plan look like?"
+5. **Investigation before change** — "investigate the root cause then give me an approach", "understand the system before changing it"
+6. **Debugging plan** — "give me a debugging plan for this intermittent failure", "plan the bugfix"
+7. **Safety-first implementation** — "what is the safest way to implement this?", "plan the bugfix carefully"
+8. **Agent preparation** — "prepare another agent to implement the feature", "generate a worker packet"
+9. **Plan mode** — "Claude is in plan mode", "I'm in plan mode", the agent is already in a planning workflow or design context
+10. **Refactor strategy** — "how should we approach this refactor?", "strategy for refactoring this module"
+
+---
+
+## When Planning Intent Is Not Active
+
+Do NOT activate the harness planning skill set for:
+
+- **Trivial one-shot edits** — "rename this variable", "fix the typo in line 42", single-line fixes, obvious corrections
+- **Casual factual questions** — "what does this function do?", "explain how this API works", "what does this error mean?" (no implementation planning requested)
+- **Direct execution directives** — "let's do it", "implement it now", "run the tests", "execute this accepted worker packet"
+- **Execution of accepted plans** — "Run the approved worker packet", "execute the accepted plan"
+- **Approvals without new planning** — "The plan looks good, proceed", "looks good, go ahead", "that's the plan — let's do it"
+- **Plan-mode exits** — "That's the plan — implement it now" (execution directive even though 'plan' appears)
+- **Explanation requests** — "what does this class do?", "explain the architecture to me"
+- Casual conversational questions and small clarification requests
+
+---
+
+## Ambiguity Rule — Decision Heuristic
+
+For ambiguous or borderline requests, apply this decision heuristic:
 
 **If the request is non-trivial AND planning intent is plausible → activate.**
 
 Rationale:
 - The cost of unnecessary planning on a non-trivial task is low (a bit of extra structured thinking).
-- The cost of unplanned execution on a non-trivial task is high (rework, missed constraints, scope creep).
+- The cost of unplanned execution on a non-trivial task is high (rework, missed constraints, scope creep, missed risks).
 
 **Bias toward activation when uncertain about non-trivial tasks.**
 
@@ -44,71 +86,63 @@ Rationale:
 
 **Casual questions and explanation requests → do NOT activate.**
 
-**Direct execution of an already-accepted `WorkerExecutionPacket` → do NOT activate planning; use `02-harness-execution.mdc`.**
+**Direct execution of an already-accepted `WorkerExecutionPacket` → do NOT activate planning; route to `02-harness-execution.mdc`.**
 
 ---
 
-## Activation: When Planning Skills Are Required
+## Examples That Must Activate
 
-Activate the harness planning skill set (`00-harness-control-plane.mdc`) when the agent detects **planning intent** semantically:
+The following MUST activate the harness planning skill set:
 
-### Semantic Planning Intent Signals
-
-- User asks to **plan**, **design**, **outline**, **decompose**, **propose steps**, **prepare a plan**, **make a strategy**, or **think before coding**
-- User asks for a **revision plan**, **migration plan**, **execution plan**, **approach**, **design steps**, **staged implementation**, or **rollout plan**
-- User asks for **step-by-step guidance** or **methodology** for a non-trivial task
-- User asks to **prepare another agent** to execute the work
-- User asks to **think before acting** or **map out** the work first
-- The agent is already in a **planning mode**, **design workflow**, or **architecture workflow**
-- The task involves **non-trivial implementation**, **refactoring**, **debugging a systemic issue**, or **a design decision** where plan quality matters
-- The user asks for an **approach** to add, change, or migrate something of moderate-to-high complexity
-
-### Activation Decision: Bias Toward Activation for Non-Trivial Tasks
-
-If uncertain and the task is non-trivial, bias toward activating the planning skill. The cost of unnecessary planning is low; the cost of unplanned execution on a complex task is high.
-
----
-
-## Positive Activation Examples
-
-The following request types MUST activate the harness planning skill set:
-
-- "Design an approach to add year switching without changing engine logic" → **activate**
-- "Before coding, outline the implementation steps" → **activate**
+- "How should we approach this refactor?" → **activate** (approach request, planning intent without "plan" keyword)
+- "Design the implementation steps for adding auth" → **activate**
+- "Before coding, figure out the right approach" → **activate**
 - "Plan the migration from v1 to v2" → **activate**
 - "What is the staged rollout approach for this feature?" → **activate**
-- "Prepare a plan for adding authentication" → **activate**
-- "How should we approach this refactor?" → **activate**
-- "I need a step-by-step strategy to migrate the database" → **activate**
-- "Create a detailed implementation strategy for this new module" → **activate**
 - "Prepare another agent to implement the feature" → **activate**
-- "Think through the architecture before we code" → **activate**
-- "Map out what needs to change for this integration" → **activate**
-- "What's the best approach for implementing X?" (for non-trivial X) → **activate**
-- "Help me think through how to restructure this service" → **activate**
-- "What would a rollout plan look like for this database change?" → **activate**
-- "Give me a debugging plan for this intermittent failure" → **activate** (debugging investigation is a planning task)
+- "Give me a debugging plan for this intermittent failure" → **activate**
+- "What's the safest way to implement this database change?" → **activate**
+- "Outline the steps to migrate the database" → **activate**
+- "Decompose this into implementation steps" → **activate**
+- "Claude is in plan mode — design the auth module" → **activate**
+- "Investigate the root cause of this production issue and plan the fix" → **activate**
 - "Design a rollout for this migration" → **activate**
-- "Investigate the root cause of this production issue and tell me the approach" → **activate**
+- "Strategy for refactoring this service without breaking the API" → **activate**
+- "What would a rollout plan look like for this database change?" → **activate**
 
 ---
 
-## Non-Activation Examples
+## Examples That Must Not Activate
 
-The following request types must NOT activate the harness planning skill set:
+The following must NOT activate the harness planning skill set:
 
 - "What does this function do?" → do NOT activate (explanation)
 - "Run the tests" → do NOT activate (direct command)
 - "Fix the typo in line 42" → do NOT activate (trivial single-location change)
-- "Rename this variable" → do NOT activate (trivial rename, no planning needed)
+- "Rename this variable from x to y" → do NOT activate (trivial rename, no planning needed)
 - "Explain how this API works" → do NOT activate (explanation)
-- "Execute this accepted worker packet" → do NOT activate (use `02-harness-execution.mdc`)
+- "Execute this accepted worker packet" → do NOT activate (route to `02-harness-execution.mdc`)
 - "Can you help me write hello world?" → do NOT activate (trivial)
-- "What does this class do?" → do NOT activate (explanation)
-- "That's the plan — let's do it" → do NOT activate (execution intent, not planning intent)
+- "That's the plan — let's do it" → do NOT activate (execution intent, not planning intent; 'plan' is lexical false positive)
 - "That's the plan — implement it now" → do NOT activate (execution directive even though 'plan' appears)
+- "The plan looks good, proceed" → do NOT activate (execution approval)
+- "looks good, go ahead" → do NOT activate (execution approval)
+- "Run the approved worker packet" → do NOT activate (direct execution)
 - Casual conversational questions → do NOT activate
-- "The plan looks good, proceed" → do NOT activate (execution directive)
+
+---
+
+## What To Do When Activated
+
+When planning intent is detected:
+
+1. **Start the harness session** — call `Scripts\invoke-harness-control-plane.ps1 start-session --raw-task "<user request>"`
+2. **Hand control to `00-harness-control-plane.mdc`** — the harness planning skill now governs
+3. **Follow the harness loop exactly** as defined in `00-harness-control-plane.mdc` until `stage: complete`
+4. **Do NOT produce any planning artifact** before harness instructs it via `nextAction`
+5. **Do NOT call MCP** before harness reaches a MCP stage
+
+The harness is the only planning control plane. Starting the harness session is the ONLY valid first action when planning intent is detected.
 
 ---
 
@@ -126,27 +160,26 @@ Planning mode and execution mode MUST NOT run simultaneously.
 
 ## Activation Decision Table
 
-| Situation | Action |
-|---|---|
-| Non-trivial design/approach/migration/refactor/implementation task | Activate `00-harness-control-plane.mdc` |
-| User explicitly asks to plan/design/outline/strategize | Activate `00-harness-control-plane.mdc` |
-| Agent is in a planning workflow or design context | Activate `00-harness-control-plane.mdc` |
-| Task is non-trivial and uncertainty exists about whether to activate | Bias toward activation — activate |
-| Casual question or explanation request | Do NOT activate |
-| Trivial single-line change | Do NOT activate |
-| Direct execution of accepted `WorkerExecutionPacket` | Use `02-harness-execution.mdc` |
-| Post-planning execution mode | Use `02-harness-execution.mdc` |
-| Trivial rename, typo fix, single-line change | Do NOT activate — trivial tasks never need planning |
-| Lexical keyword "plan" present but task is trivial or casual | Do NOT activate — lexical-only matching is insufficient |
+| Scenario | Activate harness? | Why |
+|---|---|---|
+| Non-trivial design / approach / migration / refactor / implementation task | YES | Semantic planning intent — harness produces memory-backed plan |
+| User explicitly asks to plan / design / outline / strategize / decompose | YES | Direct planning intent |
+| Agent is in plan mode / planning context / design workflow | YES | Already in planning mode |
+| Task is non-trivial and uncertainty exists about whether to activate | YES — bias toward activation | Cost of unplanned execution > cost of extra planning |
+| Casual question or explanation request | NO | No planning intent |
+| Trivial single-line change, rename, or typo fix | NO | Trivial tasks never need planning |
+| Direct execution of accepted `WorkerExecutionPacket` | NO — route to `02-harness-execution.mdc` | Execution mode, not planning mode |
+| Lexical keyword "plan" present but task is trivial or casual | NO | Lexical-only matching is insufficient — detect semantic intent |
+| "that's the plan — let's do it" or "looks good, proceed" | NO | Execution directive, not planning intent |
 
 ---
 
-## Required Relationship with Other Skills
+## Relationship With Other Skills
 
 When **planning intent is active**:
 1. Activate `00-harness-control-plane.mdc` — mandatory harness-first planning loop
-2. For MCP stages, use `03-harness-mcp-tool-calling.mdc`
-3. For harness errors, use `01-harness-failure.mdc`
+2. For MCP stages, follow `03-harness-mcp-tool-calling.mdc`
+3. For harness errors, follow `01-harness-failure.mdc`
 
 When **execution mode is active** (after planning is complete):
 1. Use `02-harness-execution.mdc` — constrained execution from accepted `WorkerExecutionPacket`
