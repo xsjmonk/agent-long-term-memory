@@ -145,7 +145,7 @@ public class SkillDrivenFlowTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         wrongResult.Success.Should().BeFalse();
@@ -163,7 +163,8 @@ public class SkillDrivenFlowTests : IDisposable
 
         r.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
         r.ToolName.Should().Be("retrieve_memory_by_chunks");
-        r.Payload.Should().ContainKey("request");
+        r.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -172,7 +173,7 @@ public class SkillDrivenFlowTests : IDisposable
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Add feature" }).SessionId;
 
         // Submit invalid RequirementIntent
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalid = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": """" }");
         var r1 = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -189,7 +190,7 @@ public class SkillDrivenFlowTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         r2.Success.Should().BeFalse();
@@ -199,7 +200,7 @@ public class SkillDrivenFlowTests : IDisposable
 
     private StepResponse SubmitRequirementIntent(string sessionId, string complexity = "low", string[]? hardConstraints = null, string[]? riskSignals = null)
     {
-        var intent = JsonSerializer.Deserialize<JsonElement>($@"
+        var intent = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement($@"
         {{
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -219,7 +220,7 @@ public class SkillDrivenFlowTests : IDisposable
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var chunkSet = JsonSerializer.Deserialize<JsonElement>(@"
+        var chunkSet = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -238,7 +239,7 @@ public class SkillDrivenFlowTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var report = JsonSerializer.Deserialize<JsonElement>(@"
+        var report = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""isValid"": true,
             ""has_core_task"": true,

@@ -207,7 +207,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitRequirementIntent(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""design"",
@@ -226,7 +226,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -244,7 +244,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""isValid"": true,
             ""has_core_task"": true,
@@ -265,7 +265,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [
@@ -294,7 +294,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""merged"": {
@@ -317,7 +317,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitBuildMemoryContextPackResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""memory_context_pack"": {
@@ -338,7 +338,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitExecutionPlan(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Design the migration"",
@@ -358,7 +358,7 @@ public class GenericAgentPlanningIntentActivatesHarnessFlowTests : IDisposable
 
     private StepResponse SubmitWorkerExecutionPacket(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""Design the migration"",
             ""scope"": ""migration layer"",

@@ -40,7 +40,7 @@ public class ProtocolDescriptionTests
     public void DescribeProtocol_ContainsNoModelClientReference()
     {
         var description = new HarnessProtocolDescription();
-        var json = JsonSerializer.Serialize(description);
+        var json = HarnessJson.SerializeProtocolDescription(description);
 
         json.Should().NotContain("model");
         json.Should().NotContain("llm");

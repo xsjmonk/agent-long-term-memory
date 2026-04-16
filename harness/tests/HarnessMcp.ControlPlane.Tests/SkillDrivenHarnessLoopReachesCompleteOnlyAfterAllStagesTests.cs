@@ -93,7 +93,7 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.Complete,
-            Artifact = new Artifact { ArtifactType = "Complete", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "Complete", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         jump.Success.Should().BeFalse("cannot complete after only 1 stage");
@@ -117,7 +117,7 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.Complete,
-            Artifact = new Artifact { ArtifactType = "Complete", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "Complete", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         jump.Success.Should().BeFalse("cannot complete without ExecutionPlan and WorkerExecutionPacket");
@@ -142,7 +142,7 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.Complete,
-            Artifact = new Artifact { ArtifactType = "Complete", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "Complete", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         jump.Success.Should().BeFalse("cannot complete without WorkerExecutionPacket");
@@ -233,7 +233,7 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
             Artifact = new Artifact
             {
                 ArtifactType = "RequirementIntent",
-                Value = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-2"", ""task_type"": ""ui"", ""goal"": ""g"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }")
+                Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-2"", ""task_type"": ""ui"", ""goal"": ""g"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }")
             }
         });
 
@@ -245,49 +245,49 @@ public class SkillDrivenHarnessLoopReachesCompleteOnlyAfterAllStagesTests : IDis
 
     private StepResponse SubmitRequirementIntent(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""task_type"": ""ui-change"", ""goal"": ""implement feature"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""task_type"": ""ui-change"", ""goal"": ""implement feature"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentGenerateRequirementIntent, Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = v } });
     }
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""complexity"": ""low"", ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement"" }] }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""complexity"": ""low"", ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement"" }] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet, Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = v } });
     }
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentValidateChunkQuality, Artifact = new Artifact { ArtifactType = "ChunkQualityReport", Value = v } });
     }
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""chunk_results"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""results"": { ""decisions"": [], ""best_practices"": [{ ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }], ""anti_patterns"": [], ""similar_cases"": [], ""constraints"": [], ""references"": [], ""structures"": [] } }] }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""chunk_results"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""results"": { ""decisions"": [], ""best_practices"": [{ ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }], ""anti_patterns"": [], ""similar_cases"": [], ""constraints"": [], ""references"": [], ""structures"": [] } }] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentCallMcpRetrieveMemoryByChunks, Artifact = new Artifact { ArtifactType = "RetrieveMemoryByChunksResponse", Value = v } });
     }
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""merged"": { ""decisions"": [], ""constraints"": [], ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant""] }], ""anti_patterns"": [], ""similar_cases"": [], ""references"": [], ""structures"": [] } }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""merged"": { ""decisions"": [], ""constraints"": [], ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant""] }], ""anti_patterns"": [], ""similar_cases"": [], ""references"": [], ""structures"": [] } }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentCallMcpMergeRetrievalResults, Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = v } });
     }
 
     private StepResponse SubmitBuildMemoryContextPackResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""memory_context_pack"": { ""must_follow"": [], ""best_practices"": [], ""avoid"": [], ""similar_case_guidance"": [], ""retrieval_support"": { ""multi_supported_items"": [], ""single_route_important_items"": [] } } }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""memory_context_pack"": { ""must_follow"": [], ""best_practices"": [], ""avoid"": [], ""similar_case_guidance"": [], ""retrieval_support"": { ""multi_supported_items"": [], ""single_route_important_items"": [] } } }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentCallMcpBuildMemoryContextPack, Artifact = new Artifact { ArtifactType = "BuildMemoryContextPackResponse", Value = v } });
     }
 
     private StepResponse SubmitExecutionPlan(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""task"": ""Add feature"", ""scope"": ""UI only"", ""constraints"": [""must not break engine""], ""forbidden_actions"": [""modify engine""], ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }], ""deliverables"": [""d""] }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""task"": ""Add feature"", ""scope"": ""UI only"", ""constraints"": [""must not break engine""], ""forbidden_actions"": [""modify engine""], ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }], ""deliverables"": [""d""] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentGenerateExecutionPlan, Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = v } });
     }
 
     private StepResponse SubmitWorkerExecutionPacket(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""goal"": ""Add feature"", ""scope"": ""UI only"", ""hard_constraints"": [""must not break engine""], ""forbidden_actions"": [""modify engine""], ""execution_rules"": [""Do NOT retrieve long-term memory independently. Do NOT replan. Do NOT expand scope.""], ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }], ""required_output_sections"": [""per_step_results"", ""final_deliverables"", ""validation_summary""] }");
+        var v = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""goal"": ""Add feature"", ""scope"": ""UI only"", ""hard_constraints"": [""must not break engine""], ""forbidden_actions"": [""modify engine""], ""execution_rules"": [""Do NOT retrieve long-term memory independently. Do NOT replan. Do NOT expand scope.""], ""steps"": [{ ""step_number"": 1, ""title"": ""s"", ""actions"": [""a""], ""outputs"": [""o""], ""acceptance_checks"": [""c""] }], ""required_output_sections"": [""per_step_results"", ""final_deliverables"", ""validation_summary""] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest { SessionId = sessionId, CompletedAction = HarnessActionName.AgentGenerateWorkerExecutionPacket, Artifact = new Artifact { ArtifactType = "WorkerExecutionPacket", Value = v } });
     }
 

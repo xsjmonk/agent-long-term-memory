@@ -170,7 +170,7 @@ public class GenericAgentSimulator
             Artifact = new Artifact
             {
                 ArtifactType = artifactType,
-                Value = JsonSerializer.Deserialize<JsonElement>("{}")
+                Value = HarnessJson.ParseJsonElement("{}")
             }
         });
     }
@@ -188,7 +188,7 @@ public class GenericAgentSimulator
             Artifact = new Artifact
             {
                 ArtifactType = GetArtifactTypeForAction(action),
-                Value = JsonSerializer.Deserialize<JsonElement>(invalidJson)
+                Value = HarnessJson.ParseJsonElement(invalidJson)
             }
         });
     }
@@ -258,7 +258,7 @@ public class GenericAgentSimulator
     private static Artifact BuildRequirementIntent() => new()
     {
         ArtifactType = "RequirementIntent",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
             ""goal"": ""implement new feature"",
@@ -271,7 +271,7 @@ public class GenericAgentSimulator
     private static Artifact BuildRetrievalChunkSet() => new()
     {
         ArtifactType = "RetrievalChunkSet",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
             ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement the feature"" }]
@@ -281,7 +281,7 @@ public class GenericAgentSimulator
     private static Artifact BuildChunkQualityReport() => new()
     {
         ArtifactType = "ChunkQualityReport",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""isValid"": true,
             ""has_core_task"": true,
             ""has_constraint"": false,
@@ -296,7 +296,7 @@ public class GenericAgentSimulator
     private static Artifact BuildRetrieveMemoryByChunksResponse() => new()
     {
         ArtifactType = "RetrieveMemoryByChunksResponse",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""chunk_results"": [{
                 ""chunk_id"": ""c1"",
@@ -317,7 +317,7 @@ public class GenericAgentSimulator
     private static Artifact BuildMergeRetrievalResultsResponse() => new()
     {
         ArtifactType = "MergeRetrievalResultsResponse",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""merged"": {
                 ""decisions"": [],
@@ -334,7 +334,7 @@ public class GenericAgentSimulator
     private static Artifact BuildBuildMemoryContextPackResponse() => new()
     {
         ArtifactType = "BuildMemoryContextPackResponse",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""memory_context_pack"": {
                 ""must_follow"": [],
@@ -349,7 +349,7 @@ public class GenericAgentSimulator
     private static Artifact BuildExecutionPlan() => new()
     {
         ArtifactType = "ExecutionPlan",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""task"": ""Add feature to UI layer"",
             ""scope"": ""UI layer only"",
@@ -369,7 +369,7 @@ public class GenericAgentSimulator
     private static Artifact BuildWorkerExecutionPacket() => new()
     {
         ArtifactType = "WorkerExecutionPacket",
-        Value = JsonSerializer.Deserialize<JsonElement>(@"{
+        Value = HarnessJson.ParseJsonElement(@"{
             ""goal"": ""Add feature to UI layer"",
             ""scope"": ""UI layer only"",
             ""hard_constraints"": [""must not change engine""],

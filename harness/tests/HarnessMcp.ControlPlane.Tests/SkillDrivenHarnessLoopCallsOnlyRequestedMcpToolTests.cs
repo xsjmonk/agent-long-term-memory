@@ -131,8 +131,8 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
     {
         var (_, r3) = AdvanceToMcpRetrieve();
 
-        r3.Payload.Should().ContainKey("request",
-            "harness must provide payload.request so agent can pass it directly to MCP tool — as mandated by MCP skill");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -144,7 +144,8 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
         r4.ToolName.Should().Be("merge_retrieval_results",
             "harness must return EXACTLY 'merge_retrieval_results'");
-        r4.Payload.Should().ContainKey("request");
+        r4.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r4.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -157,7 +158,8 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
         r5.ToolName.Should().Be("build_memory_context_pack",
             "harness must return EXACTLY 'build_memory_context_pack'");
-        r5.Payload.Should().ContainKey("request");
+        r5.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r5.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -170,7 +172,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentCallMcpMergeRetrievalResults, // WRONG
-            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse(
@@ -190,7 +192,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentCallMcpBuildMemoryContextPack, // WRONG
-            Artifact = new Artifact { ArtifactType = "BuildMemoryContextPackResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "BuildMemoryContextPackResponse", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse("wrong MCP tool at merge stage must be rejected");
@@ -208,7 +210,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentCallMcpRetrieveMemoryByChunks, // WRONG — going backwards
-            Artifact = new Artifact { ArtifactType = "RetrieveMemoryByChunksResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrieveMemoryByChunksResponse", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse("wrong MCP tool at context-pack stage must be rejected");
@@ -223,19 +225,22 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
         // Stage 3: retrieve
         r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
         r3.ToolName.Should().Be("retrieve_memory_by_chunks");
-        r3.Payload.Should().ContainKey("request");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         // Stage 4: merge
         var r4 = SubmitRetrieveMemoryByChunksResponse(sessionId);
         r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
         r4.ToolName.Should().Be("merge_retrieval_results");
-        r4.Payload.Should().ContainKey("request");
+        r4.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r4.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         // Stage 5: context pack
         var r5 = SubmitMergeRetrievalResultsResponse(sessionId);
         r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
         r5.ToolName.Should().Be("build_memory_context_pack");
-        r5.Payload.Should().ContainKey("request");
+        r5.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r5.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     // --- Navigation helpers ---
@@ -251,7 +256,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
 
     private StepResponse SubmitRequirementIntent(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""task_type"": ""ui-change"", ""goal"": ""implement feature"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }");
+        var v = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""task_type"": ""ui-change"", ""goal"": ""implement feature"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -262,7 +267,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""complexity"": ""low"", ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement feature"" }] }");
+        var v = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""complexity"": ""low"", ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement feature"" }] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -273,7 +278,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
+        var v = HarnessJson.ParseJsonElement(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -284,7 +289,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""chunk_results"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""results"": { ""decisions"": [], ""best_practices"": [{ ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }], ""anti_patterns"": [], ""similar_cases"": [], ""constraints"": [], ""references"": [], ""structures"": [] } }] }");
+        var v = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""chunk_results"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""results"": { ""decisions"": [], ""best_practices"": [{ ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }], ""anti_patterns"": [], ""similar_cases"": [], ""constraints"": [], ""references"": [], ""structures"": [] } }] }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -295,7 +300,7 @@ public class SkillDrivenHarnessLoopCallsOnlyRequestedMcpToolTests : IDisposable
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"", ""merged"": { ""decisions"": [], ""constraints"": [], ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant""] }], ""anti_patterns"": [], ""similar_cases"": [], ""references"": [], ""structures"": [] } }");
+        var v = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"", ""merged"": { ""decisions"": [], ""constraints"": [], ""best_practices"": [{ ""item"": { ""knowledge_item_id"": ""k1"", ""title"": ""t"", ""summary"": ""s"" }, ""supported_by_chunk_ids"": [""c1""], ""supported_by_chunk_types"": [""core_task""], ""merge_rationales"": [""relevant""] }], ""anti_patterns"": [], ""similar_cases"": [], ""references"": [], ""structures"": [] } }");
         return _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace HarnessMcp.ControlPlane;
@@ -20,28 +21,28 @@ public class Session
     public string? LastAcceptedAction { get; set; }
 
     [JsonPropertyName("acceptedRequirementIntent")]
-    public object? AcceptedRequirementIntent { get; set; }
+    public JsonElement? AcceptedRequirementIntent { get; set; }
 
     [JsonPropertyName("acceptedRetrievalChunkSet")]
-    public object? AcceptedRetrievalChunkSet { get; set; }
+    public JsonElement? AcceptedRetrievalChunkSet { get; set; }
 
     [JsonPropertyName("acceptedChunkQualityReport")]
-    public object? AcceptedChunkQualityReport { get; set; }
+    public JsonElement? AcceptedChunkQualityReport { get; set; }
 
     [JsonPropertyName("acceptedRetrieveMemoryByChunksResponse")]
-    public object? AcceptedRetrieveMemoryByChunksResponse { get; set; }
+    public JsonElement? AcceptedRetrieveMemoryByChunksResponse { get; set; }
 
     [JsonPropertyName("acceptedMergeRetrievalResultsResponse")]
-    public object? AcceptedMergeRetrievalResultsResponse { get; set; }
+    public JsonElement? AcceptedMergeRetrievalResultsResponse { get; set; }
 
     [JsonPropertyName("acceptedBuildMemoryContextPackResponse")]
-    public object? AcceptedBuildMemoryContextPackResponse { get; set; }
+    public JsonElement? AcceptedBuildMemoryContextPackResponse { get; set; }
 
     [JsonPropertyName("acceptedExecutionPlan")]
-    public object? AcceptedExecutionPlan { get; set; }
+    public JsonElement? AcceptedExecutionPlan { get; set; }
 
     [JsonPropertyName("acceptedWorkerExecutionPacket")]
-    public object? AcceptedWorkerExecutionPacket { get; set; }
+    public JsonElement? AcceptedWorkerExecutionPacket { get; set; }
 
     [JsonPropertyName("errors")]
     public List<string> Errors { get; set; } = new();

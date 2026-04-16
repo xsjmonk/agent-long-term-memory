@@ -115,7 +115,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet, // wrong — expected RequirementIntent
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         errResp.Success.Should().BeFalse("wrong action must hard-stop");
@@ -134,7 +134,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         // All subsequent attempts must also fail — session is permanently in error
@@ -142,7 +142,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRequirementIntent,
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""t1"", ""task_type"": ""ui"", ""goal"": ""g"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }") }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""t1"", ""task_type"": ""ui"", ""goal"": ""g"", ""hard_constraints"": [], ""risk_signals"": [], ""complexity"": ""low"" }") }
         });
 
         retry1.Success.Should().BeFalse("session in error state must reject all subsequent submissions");
@@ -160,7 +160,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRequirementIntent,
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         errResp.Success.Should().BeFalse("empty RequirementIntent must fail validation and hard-stop");
@@ -178,7 +178,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         // GetNextStep on error session must return stop-with-error
@@ -198,7 +198,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         // get-session-status (as mandated by failure skill for mismatch recovery) returns error stage
@@ -226,7 +226,7 @@ public class SkillDrivenHarnessLoopStopsOnErrorTests : IDisposable
             {
                 SessionId = r0.SessionId,
                 CompletedAction = wrongAction,
-                Artifact = new Artifact { ArtifactType = wrongArtifactType, Value = JsonSerializer.Deserialize<JsonElement>(wrongPayload) }
+                Artifact = new Artifact { ArtifactType = wrongArtifactType, Value = HarnessJson.ParseJsonElement(wrongPayload) }
             });
 
             errResp.Success.Should().BeFalse($"scenario '{label}' must hard-stop");

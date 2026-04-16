@@ -367,8 +367,8 @@ public class SimulatedAgentLoopTests : IDisposable
         r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
         r3.ToolName.Should().Be("retrieve_memory_by_chunks",
             "harness must return exact tool name as specified in 03-harness-mcp-tool-calling.mdc");
-        r3.Payload.Should().ContainKey("request",
-            "harness must provide payload.request for agent to pass directly to MCP tool");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         // Submit RAW MCP result — harness accepts it and provides next tool name
         var r4 = _agent.SubmitValidArtifact(r0.SessionId, HarnessActionName.AgentCallMcpRetrieveMemoryByChunks);
@@ -396,7 +396,7 @@ public class SimulatedAgentLoopTests : IDisposable
         var rawMcpResult = new Artifact
         {
             ArtifactType = "RetrieveMemoryByChunksResponse",
-            Value = JsonSerializer.Deserialize<JsonElement>(@"{
+            Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{
                 ""task_id"": ""task-1"",
                 ""chunk_results"": [{
                     ""chunk_id"": ""c1"",

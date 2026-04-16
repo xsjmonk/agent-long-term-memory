@@ -36,7 +36,7 @@ public class SkillAndHarnessFlowTests : IDisposable
     {
         var hcJson = string.Join(",", (hardConstraints ?? Array.Empty<string>()).Select(c => $"\"{c}\""));
         var rsJson = string.Join(",", (riskSignals ?? Array.Empty<string>()).Select(r => $"\"{r}\""));
-        var intent = JsonSerializer.Deserialize<JsonElement>($@"
+        var intent = HarnessJson.ParseJsonElement($@"
         {{
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -69,7 +69,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         if (hasSimilarCase)
             chunks.Add(@"{ ""chunk_id"": ""c4"", ""chunk_type"": ""similar_case"", ""task_shape"": { ""task_type"": ""ui-change"", ""feature_shape"": ""new-field"", ""engine_change_allowed"": false, ""likely_layers"": [], ""risk_signals"": [] } }");
 
-        var chunkSet = JsonSerializer.Deserialize<JsonElement>($@"
+        var chunkSet = HarnessJson.ParseJsonElement($@"
         {{
             ""task_id"": ""task-1"",
             ""complexity"": ""{complexity}"",
@@ -86,7 +86,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId, bool isValid = true)
     {
-        var report = JsonSerializer.Deserialize<JsonElement>($@"
+        var report = HarnessJson.ParseJsonElement($@"
         {{
             ""isValid"": {isValid.ToString().ToLower()},
             ""has_core_task"": true,
@@ -108,7 +108,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"
+        var response = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [
@@ -138,7 +138,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"
+        var response = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""merged"": {
@@ -162,7 +162,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitBuildMemoryContextPackResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"
+        var response = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""memory_context_pack"": {
@@ -184,7 +184,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitExecutionPlan(string sessionId)
     {
-        var plan = JsonSerializer.Deserialize<JsonElement>(@"
+        var plan = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Add feature to UI layer"",
@@ -213,7 +213,7 @@ public class SkillAndHarnessFlowTests : IDisposable
 
     private StepResponse SubmitWorkerExecutionPacket(string sessionId)
     {
-        var packet = JsonSerializer.Deserialize<JsonElement>(@"
+        var packet = HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""Add feature to UI layer"",
             ""scope"": ""UI layer only"",
@@ -262,7 +262,8 @@ public class SkillAndHarnessFlowTests : IDisposable
         r3.Success.Should().BeTrue();
         r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
         r3.ToolName.Should().Be("retrieve_memory_by_chunks");
-        r3.Payload.Should().ContainKey("request");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         var r4 = SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
         r4.Success.Should().BeTrue();
@@ -322,7 +323,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
-            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         wrongAction.Success.Should().BeFalse();
@@ -341,7 +342,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentCallMcpRetrieveMemoryByChunks,
-            Artifact = new Artifact { ArtifactType = "RetrieveMemoryByChunksResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrieveMemoryByChunksResponse", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse();
@@ -358,7 +359,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
 
         // Agent submits wrong shape — harness must reject
-        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        var wrongShape = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""results"": []
@@ -422,7 +423,8 @@ public class SkillAndHarnessFlowTests : IDisposable
         var r3 = SubmitChunkQualityReport(r0.SessionId);
 
         r3.ToolName.Should().Be("retrieve_memory_by_chunks");
-        r3.Payload.Should().ContainKey("request");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -431,7 +433,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         var validator = new Validators.WorkerExecutionPacketValidator();
 
         // Packet has no memory prohibition in execution_rules — must fail
-        var packetWithoutMemoryProhibition = JsonSerializer.Deserialize<JsonElement>(@"
+        var packetWithoutMemoryProhibition = HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""test"",
             ""scope"": ""ui"",
@@ -442,7 +444,7 @@ public class SkillAndHarnessFlowTests : IDisposable
             ""required_output_sections"": [""per_step_results""]
         }");
 
-        var result = validator.Validate(packetWithoutMemoryProhibition, JsonSerializer.Deserialize<JsonElement>("{}"));
+        var result = validator.Validate(packetWithoutMemoryProhibition, HarnessJson.ParseJsonElement("{}"));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("memory"));
     }
@@ -453,7 +455,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         var validator = new Validators.ExecutionPlanValidator(new ValidationOptions());
 
         // Plan uses old 'objective' field instead of canonical 'task_id' + 'task'
-        var nonCanonicalPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var nonCanonicalPlan = HarnessJson.ParseJsonElement(@"
         {
             ""objective"": ""Add feature"",
             ""scope"": ""UI"",
@@ -473,7 +475,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         var validator = new Validators.ExecutionPlanValidator(new ValidationOptions());
 
         // Canonical plan with non-empty constraints and forbidden_actions as required
-        var canonicalPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var canonicalPlan = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Add UI feature"",
@@ -509,7 +511,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.Complete,
-            Artifact = new Artifact { ArtifactType = "Complete", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "Complete", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse();
@@ -531,7 +533,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse("wrong action at need_requirement_intent must hard-stop");
@@ -550,7 +552,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentValidateChunkQuality,
-            Artifact = new Artifact { ArtifactType = "ChunkQualityReport", Value = JsonSerializer.Deserialize<JsonElement>(@"{""isValid"": true}") }
+            Artifact = new Artifact { ArtifactType = "ChunkQualityReport", Value = HarnessJson.ParseJsonElement(@"{""isValid"": true}") }
         });
 
         attempt.Success.Should().BeFalse("wrong action at need_retrieval_chunk_set must hard-stop");
@@ -569,7 +571,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
-            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse("wrong action at need_retrieval_chunk_validation must hard-stop");
@@ -590,7 +592,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentCallMcpMergeRetrievalResults,
-            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "MergeRetrievalResultsResponse", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         attempt.Success.Should().BeFalse("wrong MCP action must hard-stop");
@@ -615,7 +617,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         r6.Stage.Should().Be("need_execution_plan");
 
         // Submit plan with empty constraints — hardened validator must reject
-        var malformedPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var malformedPlan = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Add feature"",
@@ -649,7 +651,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         var r6 = SubmitBuildMemoryContextPackResponse(r0.SessionId);
         r6.Stage.Should().Be("need_execution_plan");
 
-        var malformedPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var malformedPlan = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""Add feature"",
@@ -686,7 +688,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         r7.Stage.Should().Be("need_worker_execution_packet");
 
         // Packet that doesn't prohibit memory retrieval in execution_rules — must be rejected
-        var malformedPacket = JsonSerializer.Deserialize<JsonElement>(@"
+        var malformedPacket = HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""Add feature"",
             ""scope"": ""UI only"",
@@ -724,24 +726,24 @@ public class SkillAndHarnessFlowTests : IDisposable
         r3.Stage.Should().Be("need_mcp_retrieve_memory_by_chunks");
         r3.ToolName.Should().Be("retrieve_memory_by_chunks",
             "harness must return exact tool name for retrieve stage");
-        r3.Payload.Should().ContainKey("request",
-            "harness must provide payload.request for agent to pass directly to MCP tool");
+        r3.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r3.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         // Stage 4: merge
         var r4 = SubmitRetrieveMemoryByChunksResponse(r0.SessionId);
         r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
         r4.ToolName.Should().Be("merge_retrieval_results",
             "harness must return exact tool name for merge stage");
-        r4.Payload.Should().ContainKey("request",
-            "harness must provide payload.request for merge tool");
+        r4.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r4.Payload.TryGetProperty("request", out _).Should().BeTrue();
 
         // Stage 5: context pack
         var r5 = SubmitMergeRetrievalResultsResponse(r0.SessionId);
         r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
         r5.ToolName.Should().Be("build_memory_context_pack",
             "harness must return exact tool name for context pack stage");
-        r5.Payload.Should().ContainKey("request",
-            "harness must provide payload.request for context pack tool");
+        r5.Payload.ValueKind.Should().Be(JsonValueKind.Object);
+        r5.Payload.TryGetProperty("request", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -755,7 +757,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         r4.Stage.Should().Be("need_mcp_merge_retrieval_results");
 
         // Submit invalid merge response (missing 'merged' field)
-        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        var wrongShape = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""items"": []
@@ -785,7 +787,7 @@ public class SkillAndHarnessFlowTests : IDisposable
         r5.Stage.Should().Be("need_mcp_build_memory_context_pack");
 
         // Submit invalid context pack response (missing 'memory_context_pack' field)
-        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        var wrongShape = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""context"": {}

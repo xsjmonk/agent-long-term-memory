@@ -23,12 +23,7 @@ public class RuntimeOptions
         if (File.Exists(path))
         {
             var json = File.ReadAllText(path);
-            var loaded = JsonSerializer.Deserialize<RuntimeOptions>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-            if (loaded != null)
-                options = loaded;
+            options = HarnessJson.DeserializeRuntimeOptions(json);
         }
 
         if (envVars != null)

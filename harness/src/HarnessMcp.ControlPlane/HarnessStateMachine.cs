@@ -35,7 +35,7 @@ public class StepResponse
     public List<string> Instructions { get; set; } = new();
 
     [JsonPropertyName("payload")]
-    public Dictionary<string, object?> Payload { get; set; } = new();
+    public JsonElement Payload { get; set; } = HarnessJson.CreateObject(_ => { });
 
     [JsonPropertyName("completionArtifacts")]
     public CompletionArtifacts? CompletionArtifacts { get; set; }
@@ -53,10 +53,10 @@ public class StepResponse
 public class CompletionArtifacts
 {
     [JsonPropertyName("executionPlan")]
-    public object? ExecutionPlan { get; set; }
+    public JsonElement? ExecutionPlan { get; set; }
 
     [JsonPropertyName("workerExecutionPacket")]
-    public object? WorkerExecutionPacket { get; set; }
+    public JsonElement? WorkerExecutionPacket { get; set; }
 }
 
 public class InputContract
@@ -101,7 +101,7 @@ public class Artifact
     public string SchemaVersion { get; set; } = "1.0";
 
     [JsonPropertyName("value")]
-    public object? Value { get; set; }
+    public JsonElement? Value { get; set; }
 }
 
 public class HarnessStateMachine
@@ -239,10 +239,10 @@ public class HarnessStateMachine
             Errors = session.Errors,
             Warnings = session.Warnings,
             AcceptedArtifacts = acceptedArtifacts,
-            Payload = new Dictionary<string, object?>
-            {
-                ["rawTask"] = session.RawTask
-            }
+                Payload = HarnessJson.CreateObject(w =>
+                {
+                    w.WriteString("rawTask", session.RawTask);
+                })
         };
     }
 
@@ -312,8 +312,20 @@ public class HarnessStateMachine
         };
     }
 
-    private (string nextAction, string? toolName, List<string> instructions, InputContract? inputContract, Dictionary<string, object?> payload) GetStageInstructions(HarnessStage stage, Session session)
+    private (string nextAction, string? toolName, List<string> instructions, InputContract? inputContract, JsonElement payload) GetStageInstructions(HarnessStage stage, Session session)
     {
+        static void WriteJsonElement(Utf8JsonWriter w, JsonElement? element)
+        {
+            if (element is null)
+            {
+                w.WriteNullValue();
+            }
+            else
+            {
+                element.Value.WriteTo(w);
+            }
+        }
+
         return stage switch
         {
             HarnessStage.NeedRequirementIntent => (
@@ -321,105 +333,131 @@ public class HarnessStateMachine
                 null,
                 new List<string> { "Convert the raw task into RequirementIntent JSON.", "Do not query MCP yet.", "Do not generate the plan yet." },
                 new InputContract { ArtifactType = "RequirementIntent", SchemaVersion = "1.0" },
-                new Dictionary<string, object?> { ["rawTask"] = session.RawTask }
+                HarnessJson.CreateObject(w =>
+                {
+                    w.WriteString("rawTask", session.RawTask);
+                })
             ),
             HarnessStage.NeedRetrievalChunkSet => (
                 HarnessActionName.AgentGenerateRetrievalChunkSet,
                 null,
                 new List<string> { "Generate compact purpose-specific retrieval chunks.", "Do not mix constraint, risk, pattern, or similar-case semantics in one chunk." },
                 new InputContract { ArtifactType = "RetrievalChunkSet", SchemaVersion = "1.0" },
-                new Dictionary<string, object?> { ["requirementIntent"] = session.AcceptedRequirementIntent }
+                HarnessJson.CreateObject(w =>
+                {
+                    w.WritePropertyName("requirementIntent");
+                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                })
             ),
             HarnessStage.NeedRetrievalChunkValidation => (
                 HarnessActionName.AgentValidateChunkQuality,
                 null,
                 new List<string> { "Validate chunk quality, coverage, and purity." },
                 new InputContract { ArtifactType = "ChunkQualityReport", SchemaVersion = "1.0" },
-                new Dictionary<string, object?> { ["retrievalChunkSet"] = session.AcceptedRetrievalChunkSet }
+                HarnessJson.CreateObject(w =>
+                {
+                    w.WritePropertyName("retrievalChunkSet");
+                    WriteJsonElement(w, session.AcceptedRetrievalChunkSet);
+                })
             ),
             HarnessStage.NeedMcpRetrieveMemoryByChunks => (
                 HarnessActionName.AgentCallMcpRetrieveMemoryByChunks,
                 "retrieve_memory_by_chunks",
                 new List<string> { "Call MCP tool retrieve_memory_by_chunks with the exact request provided." },
                 new InputContract { ArtifactType = "RetrieveMemoryByChunksResponse", SchemaVersion = "1.0" },
-                new Dictionary<string, object?>
+                HarnessJson.CreateObject(w =>
                 {
-                    ["request"] = new Dictionary<string, object?>
-                    {
-                        ["schemaVersion"] = "1.0",
-                        ["requestId"] = session.SessionId + "-retrieve",
-                        ["taskId"] = session.TaskId,
-                        ["requirementIntent"] = session.AcceptedRequirementIntent,
-                        ["retrievalChunks"] = session.AcceptedRetrievalChunkSet,
-                        ["search_profile"] = new Dictionary<string, object?>
-                        {
-                            ["active_only"] = true,
-                            ["minimum_authority"] = "reviewed",
-                            ["max_items_per_chunk"] = 5,
-                            ["require_type_separation"] = true
-                        }
-                    }
-                }
+                    w.WritePropertyName("request");
+                    w.WriteStartObject();
+                    w.WriteString("schemaVersion", "1.0");
+                    w.WriteString("requestId", session.SessionId + "-retrieve");
+                    w.WriteString("taskId", session.TaskId);
+                    w.WritePropertyName("requirementIntent");
+                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                    w.WritePropertyName("retrievalChunks");
+                    WriteJsonElement(w, session.AcceptedRetrievalChunkSet);
+
+                    w.WritePropertyName("search_profile");
+                    w.WriteStartObject();
+                    w.WriteBoolean("active_only", true);
+                    w.WriteString("minimum_authority", "reviewed");
+                    w.WriteNumber("max_items_per_chunk", 5);
+                    w.WriteBoolean("require_type_separation", true);
+                    w.WriteEndObject();
+
+                    w.WriteEndObject();
+                })
             ),
             HarnessStage.NeedMcpMergeRetrievalResults => (
                 HarnessActionName.AgentCallMcpMergeRetrievalResults,
                 "merge_retrieval_results",
                 new List<string> { "Call MCP tool merge_retrieval_results with the exact request provided." },
                 new InputContract { ArtifactType = "MergeRetrievalResultsResponse", SchemaVersion = "1.0" },
-                new Dictionary<string, object?>
+                HarnessJson.CreateObject(w =>
                 {
-                    ["request"] = new Dictionary<string, object?>
-                    {
-                        ["schemaVersion"] = "1.0",
-                        ["requestId"] = session.SessionId + "-merge",
-                        ["taskId"] = session.TaskId,
-                        ["retrieved"] = session.AcceptedRetrieveMemoryByChunksResponse
-                    }
-                }
+                    w.WritePropertyName("request");
+                    w.WriteStartObject();
+                    w.WriteString("schemaVersion", "1.0");
+                    w.WriteString("requestId", session.SessionId + "-merge");
+                    w.WriteString("taskId", session.TaskId);
+                    w.WritePropertyName("retrieved");
+                    WriteJsonElement(w, session.AcceptedRetrieveMemoryByChunksResponse);
+                    w.WriteEndObject();
+                })
             ),
             HarnessStage.NeedMcpBuildMemoryContextPack => (
                 HarnessActionName.AgentCallMcpBuildMemoryContextPack,
                 "build_memory_context_pack",
                 new List<string> { "Call MCP tool build_memory_context_pack with the exact request provided." },
                 new InputContract { ArtifactType = "BuildMemoryContextPackResponse", SchemaVersion = "1.0" },
-                new Dictionary<string, object?>
+                HarnessJson.CreateObject(w =>
                 {
-                    ["request"] = new Dictionary<string, object?>
-                    {
-                        ["schemaVersion"] = "1.0",
-                        ["requestId"] = session.SessionId + "-contextpack",
-                        ["taskId"] = session.TaskId,
-                        ["requirementIntent"] = session.AcceptedRequirementIntent,
-                        ["retrieved"] = session.AcceptedRetrieveMemoryByChunksResponse,
-                        ["merged"] = session.AcceptedMergeRetrievalResultsResponse
-                    }
-                }
+                    w.WritePropertyName("request");
+                    w.WriteStartObject();
+                    w.WriteString("schemaVersion", "1.0");
+                    w.WriteString("requestId", session.SessionId + "-contextpack");
+                    w.WriteString("taskId", session.TaskId);
+                    w.WritePropertyName("requirementIntent");
+                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                    w.WritePropertyName("retrieved");
+                    WriteJsonElement(w, session.AcceptedRetrieveMemoryByChunksResponse);
+                    w.WritePropertyName("merged");
+                    WriteJsonElement(w, session.AcceptedMergeRetrievalResultsResponse);
+                    w.WriteEndObject();
+                })
             ),
             HarnessStage.NeedExecutionPlan => (
                 HarnessActionName.AgentGenerateExecutionPlan,
                 null,
                 new List<string> { "Generate the execution plan from RequirementIntent, RetrievalChunkSet, and memory context pack.", "Include all constraints and acceptance criteria." },
                 new InputContract { ArtifactType = "ExecutionPlan", SchemaVersion = "1.0" },
-                new Dictionary<string, object?>
+                HarnessJson.CreateObject(w =>
                 {
-                    ["requirementIntent"] = session.AcceptedRequirementIntent,
-                    ["retrievalChunkSet"] = session.AcceptedRetrievalChunkSet,
-                    ["memoryContextPack"] = session.AcceptedBuildMemoryContextPackResponse
-                }
+                    w.WritePropertyName("requirementIntent");
+                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                    w.WritePropertyName("retrievalChunkSet");
+                    WriteJsonElement(w, session.AcceptedRetrievalChunkSet);
+                    w.WritePropertyName("memoryContextPack");
+                    WriteJsonElement(w, session.AcceptedBuildMemoryContextPackResponse);
+                })
             ),
             HarnessStage.NeedWorkerExecutionPacket => (
                 HarnessActionName.AgentGenerateWorkerExecutionPacket,
                 null,
                 new List<string> { "Generate the worker execution packet from the accepted execution plan.", "Preserve all hard constraints and forbidden actions." },
                 new InputContract { ArtifactType = "WorkerExecutionPacket", SchemaVersion = "1.0" },
-                new Dictionary<string, object?> { ["executionPlan"] = session.AcceptedExecutionPlan }
+                HarnessJson.CreateObject(w =>
+                {
+                    w.WritePropertyName("executionPlan");
+                    WriteJsonElement(w, session.AcceptedExecutionPlan);
+                })
             ),
             _ => (
                 HarnessActionName.Complete,
                 null,
                 new List<string>(),
                 null,
-                new Dictionary<string, object?>()
+                HarnessJson.CreateObject(_ => { })
             )
         };
     }

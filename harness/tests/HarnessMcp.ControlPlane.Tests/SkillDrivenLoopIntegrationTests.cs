@@ -72,7 +72,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
     {
         var hcJson = string.Join(",", (hardConstraints ?? Array.Empty<string>()).Select(c => $"\"{c}\""));
         var rsJson = string.Join(",", (riskSignals ?? Array.Empty<string>()).Select(r => $"\"{r}\""));
-        var intent = JsonSerializer.Deserialize<JsonElement>($@"{{
+        var intent = HarnessJson.ParseJsonElement($@"{{
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
             ""goal"": ""implement new feature"",
@@ -90,7 +90,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var chunkSet = JsonSerializer.Deserialize<JsonElement>(@"{
+        var chunkSet = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
             ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""implement the feature"" }]
@@ -105,7 +105,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var report = JsonSerializer.Deserialize<JsonElement>(@"{
+        var report = HarnessJson.ParseJsonElement(@"{
             ""isValid"": true,
             ""has_core_task"": true,
             ""has_constraint"": false,
@@ -125,7 +125,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"{
+        var response = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""chunk_results"": [{
                 ""chunk_id"": ""c1"",
@@ -151,7 +151,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"{
+        var response = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""merged"": {
                 ""decisions"": [],
@@ -173,7 +173,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitBuildMemoryContextPackResponse(string sessionId)
     {
-        var response = JsonSerializer.Deserialize<JsonElement>(@"{
+        var response = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""memory_context_pack"": {
                 ""must_follow"": [],
@@ -193,7 +193,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitExecutionPlan(string sessionId)
     {
-        var plan = JsonSerializer.Deserialize<JsonElement>(@"{
+        var plan = HarnessJson.ParseJsonElement(@"{
             ""task_id"": ""task-1"",
             ""task"": ""Add feature to UI layer"",
             ""scope"": ""UI layer only"",
@@ -212,7 +212,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
 
     private StepResponse SubmitWorkerExecutionPacket(string sessionId)
     {
-        var packet = JsonSerializer.Deserialize<JsonElement>(@"{
+        var packet = HarnessJson.ParseJsonElement(@"{
             ""goal"": ""Add feature to UI layer"",
             ""scope"": ""UI layer only"",
             ""hard_constraints"": [""must not change engine""],
@@ -345,7 +345,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
         {
             SessionId = r0.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessJson.ParseJsonElement("{}") }
         });
         skipStage2.Success.Should().BeFalse("cannot skip requirement intent — must submit in order");
         skipStage2.Stage.Should().Be("error");
@@ -361,7 +361,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
         {
             SessionId = r1.SessionId,
             CompletedAction = HarnessActionName.AgentGenerateExecutionPlan,
-            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "ExecutionPlan", Value = HarnessJson.ParseJsonElement("{}") }
         });
         skipToExecPlan.Success.Should().BeFalse("cannot skip MCP stages to jump to execution plan");
         skipToExecPlan.Stage.Should().Be("error");
@@ -390,7 +390,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "RetrieveMemoryByChunksResponse",
-                Value = JsonSerializer.Deserialize<JsonElement>("{}")
+                Value = HarnessJson.ParseJsonElement("{}")
             }
         });
         prematureMcp1.Success.Should().BeFalse(
@@ -409,7 +409,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "RetrieveMemoryByChunksResponse",
-                Value = JsonSerializer.Deserialize<JsonElement>("{}")
+                Value = HarnessJson.ParseJsonElement("{}")
             }
         });
         prematureMcp2.Success.Should().BeFalse(
@@ -456,7 +456,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "ChunkQualityReport",
-                Value = JsonSerializer.Deserialize<JsonElement>(
+                Value = HarnessJson.ParseJsonElement(
                     @"{""isValid"":true,""has_core_task"":true,""has_constraint"":false,""has_risk"":false,""has_pattern"":false,""has_similar_case"":false,""errors"":[],""warnings"":[]}")
             }
         });
@@ -492,7 +492,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "RetrieveMemoryByChunksResponse",
-                Value = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""task-1"" }")
+                Value = HarnessJson.ParseJsonElement(@"{ ""task_id"": ""task-1"" }")
             }
         });
         invalidRetrieve.Success.Should().BeFalse("missing chunk_results must hard-stop");
@@ -516,7 +516,8 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "ExecutionPlan",
-                Value = JsonSerializer.Deserialize<JsonElement>(@"{
+                Value = HarnessJson.ParseJsonElement(@"
+                {
                     ""task_id"": ""task-1"",
                     ""task"": ""Add feature"",
                     ""scope"": ""UI only"",
@@ -562,7 +563,7 @@ public class SkillDrivenLoopIntegrationTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "Complete",
-                Value = JsonSerializer.Deserialize<JsonElement>("{}")
+                Value = HarnessJson.ParseJsonElement("{}")
             }
         });
         earlyComplete.Success.Should().BeFalse(

@@ -23,7 +23,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingTaskId()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_type"": ""ui-change"",
             ""goal"": ""add feature"",
@@ -40,7 +40,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingTaskType()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""goal"": ""add feature"",
@@ -57,7 +57,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingGoal()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",
@@ -74,7 +74,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingHardConstraints()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",
@@ -91,7 +91,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingRiskSignals()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",
@@ -108,7 +108,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_InvalidComplexity()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",
@@ -126,7 +126,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_UnknownField()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",
@@ -149,7 +149,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_MissingTaskId()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""complexity"": ""low"",
             ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""test"" }]
@@ -163,7 +163,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_MissingComplexity()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""chunks"": [{ ""chunk_id"": ""c1"", ""chunk_type"": ""core_task"", ""text"": ""test"" }]
@@ -177,7 +177,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_MissingChunks()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low""
@@ -191,7 +191,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_UnknownChunkType()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low"",
@@ -206,7 +206,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_SimilarCaseWithoutTaskShape()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low"",
@@ -224,7 +224,7 @@ public class CanonicalContractRejectionTests
     public void RetrievalChunkSet_Reject_MissingCoreTaskChunk()
     {
         var v = new RetrievalChunkSetValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low"",
@@ -245,7 +245,7 @@ public class CanonicalContractRejectionTests
     public void RetrieveMemoryByChunks_Reject_LegacyResultsAlias()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""results"": []
@@ -259,7 +259,7 @@ public class CanonicalContractRejectionTests
     public void RetrieveMemoryByChunks_Reject_LegacyRetrievedAlias()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""retrieved"": []
@@ -273,7 +273,7 @@ public class CanonicalContractRejectionTests
     public void RetrieveMemoryByChunks_Reject_MissingChunkResults()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""t1"" }");
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""t1"" }");
         var result = v.Validate(input);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("chunk_results"));
@@ -284,7 +284,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
         // Only one bucket present instead of all required buckets
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""chunk_results"": [
@@ -306,7 +306,7 @@ public class CanonicalContractRejectionTests
     public void RetrieveMemoryByChunks_Reject_UnknownBucket()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""chunk_results"": [
@@ -335,7 +335,7 @@ public class CanonicalContractRejectionTests
     public void MergeRetrievalResults_Reject_LegacyMergedResultsAlias()
     {
         var v = new MergeRetrievalResultsResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""merged_results"": {}
@@ -349,7 +349,7 @@ public class CanonicalContractRejectionTests
     public void MergeRetrievalResults_Reject_MissingMergedObject()
     {
         var v = new MergeRetrievalResultsResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""t1"" }");
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""t1"" }");
         var result = v.Validate(input);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("merged"));
@@ -359,7 +359,7 @@ public class CanonicalContractRejectionTests
     public void MergeRetrievalResults_Reject_UnknownBucket()
     {
         var v = new MergeRetrievalResultsResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""merged"": {
@@ -382,7 +382,7 @@ public class CanonicalContractRejectionTests
     public void BuildMemoryContextPack_Reject_ContextPackAlias()
     {
         var v = new BuildMemoryContextPackResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""context_pack"": {}
@@ -396,7 +396,7 @@ public class CanonicalContractRejectionTests
     public void BuildMemoryContextPack_Reject_MissingMemoryContextPack()
     {
         var v = new BuildMemoryContextPackResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": ""t1"" }");
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": ""t1"" }");
         var result = v.Validate(input);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("memory_context_pack"));
@@ -407,7 +407,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new BuildMemoryContextPackResponseValidator();
         // Missing avoid and similar_case_guidance sections
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""memory_context_pack"": {
@@ -429,7 +429,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
         // chunk exists but has no 'results' field
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""chunk_results"": [
@@ -448,7 +448,7 @@ public class CanonicalContractRejectionTests
     public void RetrieveMemoryByChunks_Reject_EmptyChunkResults()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""chunk_results"": []
@@ -463,7 +463,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new MergeRetrievalResultsResponseValidator();
         // merged bucket item missing the required 'item' wrapper object
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""merged"": {
@@ -495,7 +495,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new MergeRetrievalResultsResponseValidator();
         // merged bucket item has 'item' but missing 'supported_by_chunk_ids'
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""merged"": {
@@ -524,7 +524,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new MergeRetrievalResultsResponseValidator();
         // merged has only some buckets, missing others
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""merged"": {
@@ -542,7 +542,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new BuildMemoryContextPackResponseValidator();
         // memory_context_pack present but missing retrieval_support
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""memory_context_pack"": {
@@ -565,7 +565,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_MissingTaskId()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -583,7 +583,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_MissingTask()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""scope"": ""ui layer"",
@@ -601,7 +601,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_MissingScope()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -619,7 +619,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_EmptyConstraints()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -638,7 +638,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_EmptyForbiddenActions()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -657,7 +657,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_NonConsecutiveStepNumbers()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -679,7 +679,7 @@ public class CanonicalContractRejectionTests
     public void ExecutionPlan_Reject_StepMissingAcceptanceChecks()
     {
         var v = new ExecutionPlanValidator(new ValidationOptions());
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -704,7 +704,7 @@ public class CanonicalContractRejectionTests
     public void WorkerExecutionPacket_Reject_MissingGoal()
     {
         var v = new WorkerExecutionPacketValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""scope"": ""ui layer"",
             ""hard_constraints"": [""c1""],
@@ -722,7 +722,7 @@ public class CanonicalContractRejectionTests
     public void WorkerExecutionPacket_Reject_EmptyHardConstraints()
     {
         var v = new WorkerExecutionPacketValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -741,7 +741,7 @@ public class CanonicalContractRejectionTests
     public void WorkerExecutionPacket_Reject_EmptyExecutionRules()
     {
         var v = new WorkerExecutionPacketValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -761,7 +761,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new WorkerExecutionPacketValidator();
         // execution_rules does not mention memory prohibition
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -781,7 +781,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new WorkerExecutionPacketValidator();
         // steps contain replanning instructions
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -801,7 +801,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new WorkerExecutionPacketValidator();
         // steps instruct independent memory retrieval
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -820,7 +820,7 @@ public class CanonicalContractRejectionTests
     public void WorkerExecutionPacket_Reject_MissingScope()
     {
         var v = new WorkerExecutionPacketValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""hard_constraints"": [""c1""],
@@ -838,7 +838,7 @@ public class CanonicalContractRejectionTests
     public void WorkerExecutionPacket_Reject_EmptyForbiddenActions()
     {
         var v = new WorkerExecutionPacketValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -858,7 +858,7 @@ public class CanonicalContractRejectionTests
     {
         var v = new WorkerExecutionPacketValidator();
 
-        var executionPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var executionPlan = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task"": ""implement feature"",
@@ -870,7 +870,7 @@ public class CanonicalContractRejectionTests
         }");
 
         // Worker packet omits 'modify engine files' from forbidden_actions
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""implement feature"",
             ""scope"": ""ui layer"",
@@ -891,7 +891,7 @@ public class CanonicalContractRejectionTests
     public void RequirementIntent_Reject_MissingComplexity()
     {
         var v = new RequirementIntentValidator();
-        var input = JsonSerializer.Deserialize<JsonElement>(@"
+        var input = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui-change"",

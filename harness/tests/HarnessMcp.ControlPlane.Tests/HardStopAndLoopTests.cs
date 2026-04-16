@@ -80,7 +80,7 @@ public class HardStopAndLoopTests : IDisposable
     {
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Task" }).SessionId;
 
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalid = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": """" }");
         var r = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -100,7 +100,7 @@ public class HardStopAndLoopTests : IDisposable
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Task" }).SessionId;
 
         // Submit invalid artifact → session enters error state
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalid = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": """" }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -113,7 +113,7 @@ public class HardStopAndLoopTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.AgentGenerateRetrievalChunkSet,
-            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RetrievalChunkSet", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         continueAttempt.Success.Should().BeFalse("flow must not continue after error without resubmitting a valid artifact");
@@ -125,7 +125,7 @@ public class HardStopAndLoopTests : IDisposable
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Task" }).SessionId;
 
         // Submit invalid
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalid = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""task_id"": """" }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -141,7 +141,7 @@ public class HardStopAndLoopTests : IDisposable
 
         // Start fresh session and submit valid artifact
         var newSession = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Task" });
-        var valid = JsonSerializer.Deserialize<JsonElement>(@"
+        var valid = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -168,7 +168,7 @@ public class HardStopAndLoopTests : IDisposable
         var sessionId = StartAndReachMcpStage();
 
         // Submit wrong shape — uses 'results' not 'chunk_results'
-        var wrongShape = JsonSerializer.Deserialize<JsonElement>(@"
+        var wrongShape = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""results"": []
@@ -196,7 +196,7 @@ public class HardStopAndLoopTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = "wrong_action_name",
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         r.Success.Should().BeFalse();
@@ -211,7 +211,7 @@ public class HardStopAndLoopTests : IDisposable
         {
             SessionId = "non-existent-session-id",
             CompletedAction = HarnessActionName.AgentGenerateRequirementIntent,
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         r.Success.Should().BeFalse();
@@ -228,7 +228,7 @@ public class HardStopAndLoopTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = HarnessActionName.Complete,
-            Artifact = new Artifact { ArtifactType = "Complete", Value = JsonSerializer.Deserialize<JsonElement>("{}") }
+            Artifact = new Artifact { ArtifactType = "Complete", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         r.Success.Should().BeFalse();
@@ -242,7 +242,7 @@ public class HardStopAndLoopTests : IDisposable
         SubmitValidRequirementIntent(sessionId);
 
         // Submit chunk set with no core_task chunk
-        var noCorTask = JsonSerializer.Deserialize<JsonElement>(@"
+        var noCorTask = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -268,7 +268,7 @@ public class HardStopAndLoopTests : IDisposable
         var validator = new Validators.ExecutionPlanValidator(new ValidationOptions());
 
         // Plan with old 'objective' field and missing 'task_id', 'task', 'forbidden_actions'
-        var nonCanonical = JsonSerializer.Deserialize<JsonElement>(@"
+        var nonCanonical = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""objective"": ""Build something"",
             ""scope"": ""UI"",
@@ -289,7 +289,7 @@ public class HardStopAndLoopTests : IDisposable
         var validator = new Validators.WorkerExecutionPacketValidator();
 
         // Packet uses 'objective' instead of canonical 'goal'
-        var nonCanonical = JsonSerializer.Deserialize<JsonElement>(@"
+        var nonCanonical = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""objective"": ""Build something"",
             ""hard_constraints"": [""c1""],
@@ -299,7 +299,7 @@ public class HardStopAndLoopTests : IDisposable
             ""required_output_sections"": [""per_step_results""]
         }");
 
-        var result = validator.Validate(nonCanonical, JsonSerializer.Deserialize<JsonElement>("{}"));
+        var result = validator.Validate(nonCanonical, HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}"));
         result.IsValid.Should().BeFalse("worker packet with 'objective' instead of 'goal' must fail validation");
         result.Errors.Should().Contain(e => e.Contains("goal"),
             "must require canonical 'goal' field");
@@ -318,7 +318,7 @@ public class HardStopAndLoopTests : IDisposable
 
     private void SubmitValidRequirementIntent(string sessionId)
     {
-        var intent = JsonSerializer.Deserialize<JsonElement>(@"
+        var intent = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -337,7 +337,7 @@ public class HardStopAndLoopTests : IDisposable
 
     private void SubmitValidChunkSet(string sessionId)
     {
-        var chunkSet = JsonSerializer.Deserialize<JsonElement>(@"
+        var chunkSet = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -355,7 +355,7 @@ public class HardStopAndLoopTests : IDisposable
 
     private void SubmitValidChunkQualityReport(string sessionId)
     {
-        var report = JsonSerializer.Deserialize<JsonElement>(@"
+        var report = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""isValid"": true,
             ""has_core_task"": true,

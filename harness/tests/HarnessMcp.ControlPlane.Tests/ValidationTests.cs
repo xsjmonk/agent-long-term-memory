@@ -25,7 +25,7 @@ public class ValidationTests : IDisposable
     {
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "test" }).SessionId;
 
-        var invalidIntent = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalidIntent = HarnessJson.ParseJsonElement(@"{ ""task_id"": """" }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -48,7 +48,7 @@ public class ValidationTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = "agent_wrong_action",
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = new object() }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessJson.ParseJsonElement("{}") }
         });
 
         response.Success.Should().BeFalse();
@@ -63,7 +63,7 @@ public class ValidationTests : IDisposable
         _SubmitRequirementIntent(sessionId);
         _SubmitChunkSet(sessionId);
 
-        var invalidReport = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": false, ""errors"": [""quality issue""] }");
+        var invalidReport = HarnessJson.ParseJsonElement(@"{ ""isValid"": false, ""errors"": [""quality issue""] }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -84,7 +84,7 @@ public class ValidationTests : IDisposable
         _SubmitChunkSet(sessionId);
         _SubmitChunkValidation(sessionId);
 
-        var invalidResponse = JsonSerializer.Deserialize<JsonElement>(@"{ ""wrong_field"": ""value"" }");
+        var invalidResponse = HarnessJson.ParseJsonElement(@"{ ""wrong_field"": ""value"" }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -105,7 +105,7 @@ public class ValidationTests : IDisposable
         _SubmitChunkValidation(sessionId);
         _SubmitMcpRetrieve(sessionId);
 
-        var invalidResponse = JsonSerializer.Deserialize<JsonElement>(@"{ ""wrong_field"": ""value"" }");
+        var invalidResponse = HarnessJson.ParseJsonElement(@"{ ""wrong_field"": ""value"" }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -127,7 +127,7 @@ public class ValidationTests : IDisposable
         _SubmitMcpRetrieve(sessionId);
         _SubmitMerge(sessionId);
 
-        var invalidResponse = JsonSerializer.Deserialize<JsonElement>(@"{ ""some_other"": ""value"" }");
+        var invalidResponse = HarnessJson.ParseJsonElement(@"{ ""some_other"": ""value"" }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -143,7 +143,7 @@ public class ValidationTests : IDisposable
     public void RetrieveResponseWithResultsAlias_ReturnsError()
     {
         var v = new RetrieveMemoryByChunksResponseValidator();
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""results"": [] }");
+        var invalid = HarnessJson.ParseJsonElement(@"{ ""results"": [] }");
         var result = v.Validate(invalid);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("chunk_results"));
@@ -153,7 +153,7 @@ public class ValidationTests : IDisposable
     public void MergeResponseWithMergedResultsAlias_ReturnsError()
     {
         var v = new MergeRetrievalResultsResponseValidator();
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""merged_results"": [] }");
+        var invalid = HarnessJson.ParseJsonElement(@"{ ""merged_results"": [] }");
         var result = v.Validate(invalid);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("merged_results"));
@@ -163,7 +163,7 @@ public class ValidationTests : IDisposable
     public void ContextPackResponseWithWrongField_ReturnsError()
     {
         var v = new BuildMemoryContextPackResponseValidator();
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""context_pack"": {} }");
+        var invalid = HarnessJson.ParseJsonElement(@"{ ""context_pack"": {} }");
         var result = v.Validate(invalid);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("memory_context_pack"));
@@ -173,7 +173,7 @@ public class ValidationTests : IDisposable
     public void ChunkSetValidatorRejectsPurityViolation()
     {
         var validator = new RetrievalChunkSetValidator(new ValidationOptions());
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"
+        var invalid = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low"",
@@ -190,7 +190,7 @@ public class ValidationTests : IDisposable
     public void ChunkSetValidatorRejectsDuplicateChunkId()
     {
         var validator = new RetrievalChunkSetValidator(new ValidationOptions());
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"
+        var invalid = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""complexity"": ""low"",
@@ -208,7 +208,7 @@ public class ValidationTests : IDisposable
     public void RequirementIntentRejectsInvalidComplexity()
     {
         var validator = new RequirementIntentValidator();
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"
+        var invalid = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui"",
@@ -226,7 +226,7 @@ public class ValidationTests : IDisposable
     public void RequirementIntentRejectsUnknownFields()
     {
         var validator = new RequirementIntentValidator();
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"
+        var invalid = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""ui"",
@@ -243,7 +243,7 @@ public class ValidationTests : IDisposable
 
     private void _SubmitRequirementIntent(string sessionId)
     {
-        var intentJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var intentJson = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -263,7 +263,7 @@ public class ValidationTests : IDisposable
 
     private void _SubmitChunkSet(string sessionId)
     {
-        var chunkSetJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var chunkSetJson = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -281,7 +281,7 @@ public class ValidationTests : IDisposable
 
     private void _SubmitChunkValidation(string sessionId)
     {
-        var reportJson = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false }");
+        var reportJson = HarnessJson.ParseJsonElement(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": false, ""has_risk"": false, ""has_pattern"": false, ""has_similar_case"": false }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -292,7 +292,7 @@ public class ValidationTests : IDisposable
 
     private void _SubmitMcpRetrieve(string sessionId)
     {
-        var retrieveJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var retrieveJson = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [
@@ -321,7 +321,7 @@ public class ValidationTests : IDisposable
 
     private void _SubmitMerge(string sessionId)
     {
-        var mergeJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var mergeJson = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""merged"": {

@@ -53,7 +53,7 @@ static int StartSession(string[] args, RuntimeOptions options)
     var stateMachine = new HarnessStateMachine(store, options.Validation);
     var response = stateMachine.StartSession(request);
 
-    Console.WriteLine(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeStepResponse(response));
     return response.Success ? 0 : 1;
 }
 
@@ -64,7 +64,7 @@ static int GetNextStep(string[] args, RuntimeOptions options)
     var stateMachine = new HarnessStateMachine(store, options.Validation);
     var response = stateMachine.GetNextStep(sessionId);
 
-    Console.WriteLine(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeStepResponse(response));
     return response.Success ? 0 : 1;
 }
 
@@ -82,14 +82,15 @@ static int SubmitStepResult(string[] args, RuntimeOptions options)
     }
 
     var artifactJson = File.ReadAllText(artifactFile);
-    object? artifactValue;
+    JsonElement parsedArtifact;
     try
     {
-        artifactValue = JsonSerializer.Deserialize<object>(artifactJson);
+        parsedArtifact = HarnessJson.ParseJsonElement(artifactJson);
     }
-    catch
+    catch (JsonException)
     {
-        artifactValue = artifactJson;
+        Console.Error.WriteLine($"Invalid JSON in artifact file: {artifactFile}");
+        return 1;
     }
 
     var request = new SubmitStepResultRequest
@@ -99,7 +100,7 @@ static int SubmitStepResult(string[] args, RuntimeOptions options)
         Artifact = new Artifact
         {
             ArtifactType = artifactType,
-            Value = artifactValue
+            Value = parsedArtifact
         }
     };
 
@@ -107,7 +108,7 @@ static int SubmitStepResult(string[] args, RuntimeOptions options)
     var stateMachine = new HarnessStateMachine(store, options.Validation);
     var response = stateMachine.SubmitStepResult(request);
 
-    Console.WriteLine(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeStepResponse(response));
     return response.Success ? 0 : 1;
 }
 
@@ -118,7 +119,7 @@ static int GetSessionStatus(string[] args, RuntimeOptions options)
     var stateMachine = new HarnessStateMachine(store, options.Validation);
     var response = stateMachine.GetSessionStatus(sessionId);
 
-    Console.WriteLine(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeStepResponse(response));
     return response.Success ? 0 : 1;
 }
 
@@ -129,14 +130,14 @@ static int CancelSession(string[] args, RuntimeOptions options)
     var stateMachine = new HarnessStateMachine(store, options.Validation);
     var response = stateMachine.CancelSession(sessionId);
 
-    Console.WriteLine(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeStepResponse(response));
     return response.Success ? 0 : 1;
 }
 
 static int DescribeProtocol()
 {
     var description = new HarnessProtocolDescription();
-    Console.WriteLine(JsonSerializer.Serialize(description, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(HarnessJson.SerializeProtocolDescription(description));
     return 0;
 }
 

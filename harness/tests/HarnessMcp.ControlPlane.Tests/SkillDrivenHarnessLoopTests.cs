@@ -184,7 +184,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
         // then generate RetrievalChunkSet.
 
         // Submit RequirementIntent
-        var intent = JsonSerializer.Deserialize<JsonElement>(@"
+        var intent = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""task_type"": ""feature"",
@@ -204,7 +204,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
             "after RequirementIntent is accepted, harness moves to chunk set stage");
 
         // Agent cannot skip ahead and submit ExecutionPlan at this point
-        var earlyExecutionPlan = JsonSerializer.Deserialize<JsonElement>(@"
+        var earlyExecutionPlan = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""t1"",
             ""steps"": [],
@@ -272,7 +272,9 @@ public class SkillDrivenHarnessLoopTests : IDisposable
         var sessionId = _sm.StartSession(new StartSessionRequest { RawTask = "Task" }).SessionId;
 
         // Submit invalid RequirementIntent → harness returns error
-        var invalid = JsonSerializer.Deserialize<JsonElement>(@"{ ""task_id"": """" }");
+        var invalid = HarnessJson.ParseJsonElement(@"{
+            ""task_id"": """"
+        }");
         var errorResponse = _sm.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -295,7 +297,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
             Artifact = new Artifact
             {
                 ArtifactType = "RetrievalChunkSet",
-                Value = JsonSerializer.Deserialize<JsonElement>(@"{ ""chunks"": [] }")
+                Value = HarnessJson.ParseJsonElement(@"{ ""chunks"": [] }")
             }
         });
 
@@ -309,7 +311,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitRequirementIntent(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""design"",
@@ -328,7 +330,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitRetrievalChunkSet(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -346,7 +348,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitChunkQualityReport(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""isValid"": true,
             ""has_core_task"": true,
@@ -367,7 +369,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitRetrieveMemoryByChunksResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [
@@ -396,7 +398,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitMergeRetrievalResultsResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""merged"": {
@@ -419,7 +421,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitBuildMemoryContextPackResponse(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""memory_context_pack"": {
@@ -440,7 +442,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitExecutionPlan(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task"": ""test task"",
@@ -460,7 +462,7 @@ public class SkillDrivenHarnessLoopTests : IDisposable
 
     private StepResponse SubmitWorkerExecutionPacket(string sessionId)
     {
-        var v = JsonSerializer.Deserialize<JsonElement>(@"
+        var v = HarnessJson.ParseJsonElement(@"
         {
             ""goal"": ""test"",
             ""scope"": ""test"",

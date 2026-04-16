@@ -35,7 +35,7 @@ public class ProtocolTests : IDisposable
     {
         var sessionId = _stateMachine.StartSession(new StartSessionRequest { RawTask = "Add feature" }).SessionId;
 
-        var intent = JsonSerializer.Deserialize<JsonElement>(@"
+        var intent = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -63,7 +63,7 @@ public class ProtocolTests : IDisposable
         
         _SubmitRequirementIntent(sessionId);
 
-        var chunkSet = JsonSerializer.Deserialize<JsonElement>(@"
+        var chunkSet = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -89,7 +89,7 @@ public class ProtocolTests : IDisposable
         _SubmitRequirementIntent(sessionId);
         _SubmitChunkSet(sessionId);
 
-        var report = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": true, ""has_risk"": false, ""has_pattern"": true, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
+        var report = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": true, ""has_risk"": false, ""has_pattern"": true, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
 
         var response = _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
@@ -109,7 +109,7 @@ public class ProtocolTests : IDisposable
         _SubmitChunkSet(sessionId);
         _SubmitChunkValidation(sessionId);
 
-        var retrieve = JsonSerializer.Deserialize<JsonElement>(@"
+        var retrieve = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [
@@ -159,7 +159,7 @@ public class ProtocolTests : IDisposable
         {
             SessionId = sessionId,
             CompletedAction = "wrong_action",
-            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = new object() }
+            Artifact = new Artifact { ArtifactType = "RequirementIntent", Value = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement("{}") }
         });
 
         response.Success.Should().BeFalse();
@@ -168,7 +168,7 @@ public class ProtocolTests : IDisposable
 
     private void _SubmitRequirementIntent(string sessionId)
     {
-        var intentJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var intentJson = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""task_type"": ""ui-change"",
@@ -188,7 +188,7 @@ public class ProtocolTests : IDisposable
 
     private void _SubmitChunkSet(string sessionId)
     {
-        var chunkSetJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var chunkSetJson = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""complexity"": ""low"",
@@ -207,7 +207,7 @@ public class ProtocolTests : IDisposable
 
     private void _SubmitChunkValidation(string sessionId)
     {
-        var reportJson = JsonSerializer.Deserialize<JsonElement>(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": true, ""has_risk"": false, ""has_pattern"": true, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
+        var reportJson = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"{ ""isValid"": true, ""has_core_task"": true, ""has_constraint"": true, ""has_risk"": false, ""has_pattern"": true, ""has_similar_case"": false, ""errors"": [], ""warnings"": [] }");
         _stateMachine.SubmitStepResult(new SubmitStepResultRequest
         {
             SessionId = sessionId,
@@ -218,7 +218,7 @@ public class ProtocolTests : IDisposable
 
     private void _SubmitMcpRetrieve(string sessionId)
     {
-        var retrieveJson = JsonSerializer.Deserialize<JsonElement>(@"
+        var retrieveJson = HarnessMcp.ControlPlane.HarnessJson.ParseJsonElement(@"
         {
             ""task_id"": ""task-1"",
             ""chunk_results"": [

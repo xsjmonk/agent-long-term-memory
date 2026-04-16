@@ -22,20 +22,26 @@ public static class StaticMonitoringPageProvider
     section { border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; background: #fff; }
     h2 { margin: 0; padding: 8px 10px; background: #f3f4f6; font-size: 14px; border-bottom: 1px solid #e5e7eb; }
     .table-wrap { max-height: 320px; overflow: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: inherit; }
     th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; vertical-align: top; }
     th { text-align: left; background: #f9fafb; position: sticky; top: 0; }
     tr:nth-child(even) td { background: #f9fafb; }
     .muted { color: #6b7280; }
     .warn { color: #6b7280; }
     .err { color: #6b7280; }
-    #status { font-size: 12px; color: #6b7280; }
+    #status { font-size: inherit; color: #6b7280; }
   </style>
 </head>
 <body>
-  <header>
-    <div><strong>Harness MCP</strong> <span class="muted">/monitor</span></div>
-    <div id="status" class="muted">loading…</div>
+  <header style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+    <div style="display:flex; flex-direction:column; gap: 4px;">
+      <div><strong>Harness MCP</strong> <span class="muted">/monitor</span></div>
+      <div id="status" class="muted">loading…</div>
+    </div>
+    <div style="display:flex; gap: 8px; align-items:center; flex: 0 0 auto;">
+      <button type="button" id="btn-font-dec" style="padding: 6px 10px; border: 1px solid #d1d5db; background: #fff; cursor: pointer;">A-</button>
+      <button type="button" id="btn-font-inc" style="padding: 6px 10px; border: 1px solid #d1d5db; background: #fff; cursor: pointer;">A+</button>
+    </div>
   </header>
   <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
   <main>
@@ -52,6 +58,27 @@ public static class StaticMonitoringPageProvider
   const MAX_ROWS = {{maxRows}};
   const statusEl = document.getElementById('status');
   const cap = (s) => (!s ? '' : (s.length > {{preview}} ? s.slice(0, {{preview}}) + '…' : s));
+
+  function setFontSizePx(px) {
+    document.body.style.fontSize = px + 'px';
+  }
+
+  function bindFontButtons() {
+    const dec = document.getElementById('btn-font-dec');
+    const inc = document.getElementById('btn-font-inc');
+    if (!dec || !inc) return;
+
+    // Keep within a reasonable range for readability.
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const readPx = () => {
+      const s = window.getComputedStyle(document.body).fontSize;
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 14;
+    };
+
+    dec.addEventListener('click', () => setFontSizePx(clamp(readPx() - 1, 10, 20)));
+    inc.addEventListener('click', () => setFontSizePx(clamp(readPx() + 1, 10, 20)));
+  }
 
   function appendRow(tbody, cells, maxRows) {
     const tr = document.createElement('tr');
@@ -228,6 +255,8 @@ public static class StaticMonitoringPageProvider
 
   (async () => {
     await loadSnapshot();
+    bindFontButtons();
+    setFontSizePx(14);
     const r = await fetch('/monitor/snapshot');
     const s = await r.json();
     await connectSignalR(!!s.server.realtimeEnabled);

@@ -6,16 +6,10 @@ namespace HarnessMcp.ControlPlane;
 public class SessionStore
 {
     private readonly string _sessionsRoot;
-    private readonly JsonSerializerOptions _jsonOptions;
 
     public SessionStore(string sessionsRoot)
     {
         _sessionsRoot = sessionsRoot;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
     }
 
     public Session? Load(string sessionId)
@@ -25,14 +19,14 @@ public class SessionStore
             return null;
 
         var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<Session>(json, _jsonOptions);
+        return HarnessJson.DeserializeSession(json);
     }
 
     public void Save(Session session)
     {
         EnsureDirectoryExists();
         session.UpdatedUtc = UtcClock.UtcNow;
-        var json = JsonSerializer.Serialize(session, _jsonOptions);
+        var json = HarnessJson.SerializeSession(session);
         File.WriteAllText(GetPath(session.SessionId), json);
     }
 
@@ -49,7 +43,7 @@ public class SessionStore
         foreach (var file in Directory.GetFiles(_sessionsRoot, "*.json"))
         {
             var json = File.ReadAllText(file);
-            yield return JsonSerializer.Deserialize<Session>(json, _jsonOptions)!;
+            yield return HarnessJson.DeserializeSession(json)!;
         }
     }
 
