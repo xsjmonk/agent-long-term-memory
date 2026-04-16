@@ -136,13 +136,24 @@ The following must NOT activate the harness planning skill set:
 
 When planning intent is detected:
 
-1. **Start the harness session** — call `Scripts\invoke-harness-control-plane.ps1 start-session --raw-task "<user request>"`
-2. **Hand control to `00-harness-control-plane.mdc`** — the harness planning skill now governs
-3. **Follow the harness loop exactly** as defined in `00-harness-control-plane.mdc` until `stage: complete`
-4. **Do NOT produce any planning artifact** before harness instructs it via `nextAction`
-5. **Do NOT call MCP** before harness reaches a MCP stage
+1. **Set up environment** (if needed) — ensure `HARNESS_EXE_PATH` points to the control-plane executable
+
+2. **Start the harness session** — call (adjust path to your deployment):
+   ```powershell
+   .\harness\invoke-harness-control-plane.ps1 start-session -RawTask "<user request>"
+   ```
+
+3. **Hand control to `00-harness-control-plane.mdc`** — the harness planning skill now governs
+
+4. **Follow the harness loop exactly** as defined in `00-harness-control-plane.mdc` until `stage: complete`
+
+5. **Do NOT produce any planning artifact** before harness instructs it via `nextAction`
+
+6. **Do NOT call MCP** before harness reaches a MCP stage
 
 The harness is the only planning control plane. Starting the harness session is the ONLY valid first action when planning intent is detected.
+
+**Note:** Use PowerShell parameter syntax (`-RawTask`, `-SessionId`, etc.), not long-form dashes (`--raw-task`, `--session-id`).
 
 ---
 

@@ -41,17 +41,38 @@ Execute these steps in exact order. NEVER skip. NEVER batch. NEVER deviate.
 5. Call `submit-step-result` — submit it back to harness to receive the next required step
 6. Repeat steps 2–5 until `stage == complete` or `nextAction == stop_with_error`
 
+### Setup (First Time)
+
+Before starting a planning session, set up the harness environment by sourcing the setup script (path may vary by deployment):
+
+```powershell
+# Example for deployment in ./harness/ directory:
+. .\harness\setup-harness-env.ps1
+
+# Or manually set HARNESS_EXE_PATH to your executable:
+$env:HARNESS_EXE_PATH = "<path-to-HarnessMcp.ControlPlane.exe>"
+```
+
+### Running the Loop
+
+Use the deployment-appropriate path and PowerShell parameter syntax:
+
 ```powershell
 # Start planning session
-Scripts\invoke-harness-control-plane.ps1 start-session --raw-task "<task>"
+.\harness\invoke-harness-control-plane.ps1 start-session -RawTask "<task>"
 
-# Submit artifact, receive next required action
-Scripts\invoke-harness-control-plane.ps1 submit-step-result `
-    --session-id <id> `
-    --action <nextAction> `
-    --artifact-type <type> `
-    --artifact-file <artifact.json>
+# Submit artifact result, receive next required action
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId <sessionId> `
+    -Action <nextAction> `
+    -ArtifactType <artifactType> `
+    -ArtifactFile <path-to-artifact.json>
 ```
+
+**Important notes:**
+- Adjust `.harness\` path to match your deployment location
+- Use PowerShell `-ParameterName` syntax, NOT long-form `--parameter-name`
+- The script locates the executable via `HARNESS_EXE_PATH` environment variable or searches standard build paths
 
 MUST submit it back to harness after every artifact. NEVER proceed to the next stage without harness approval.
 
@@ -108,11 +129,11 @@ When harness returns `stage: complete`, extract `completionArtifacts` from the r
 If the agent loses context during an active session:
 
 ```powershell
-# Re-sync current required action
-Scripts\invoke-harness-control-plane.ps1 get-next-step --session-id <id>
+# Re-sync current required action (use your deployment path)
+.\harness\invoke-harness-control-plane.ps1 get-next-step -SessionId <sessionId>
 
 # Inspect accepted artifacts and current state
-Scripts\invoke-harness-control-plane.ps1 get-session-status --session-id <id>
+.\harness\invoke-harness-control-plane.ps1 get-session-status -SessionId <sessionId>
 ```
 
 Harness returns the current `stage` and required `nextAction`. Resume from there.

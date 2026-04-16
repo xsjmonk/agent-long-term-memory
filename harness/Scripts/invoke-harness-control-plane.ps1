@@ -55,7 +55,12 @@ if ($env:HARNESS_EXE_PATH) {
     }
 }
 else {
+    # Search paths: prioritize same directory (deployment), then source build paths
     $searchPaths = @(
+        # Same directory as this script (typical deployment structure)
+        "$PSScriptRoot\HarnessMcp.ControlPlane.exe",
+        "$PSScriptRoot\HarnessMcp.ControlPlane",
+        # Source build paths (development structure)
         "$repoRoot\src\HarnessMcp.ControlPlane\bin\Release\net8.0\HarnessMcp.ControlPlane.exe",
         "$repoRoot\src\HarnessMcp.ControlPlane\bin\Release\net8.0\HarnessMcp.ControlPlane",
         "$repoRoot\src\HarnessMcp.ControlPlane\bin\Debug\net8.0\HarnessMcp.ControlPlane.exe",
