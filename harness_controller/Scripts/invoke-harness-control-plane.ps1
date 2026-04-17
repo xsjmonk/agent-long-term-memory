@@ -1,25 +1,84 @@
+<#
+.SYNOPSIS
+Harness Control-Plane Planning Orchestrator
+
+.DESCRIPTION
+The ONLY supported entrypoint for the Harness Control-Plane protocol. Manages structured AI-driven planning sessions with MCP integration.
+
+.PARAMETER Command
+Required command: start-session, submit-step-result, get-next-step, get-session-status, or cancel-session
+
+.PARAMETER RawTask
+Raw task description (required for start-session)
+
+.PARAMETER SessionId
+Session identifier returned by start-session (required for most commands)
+
+.PARAMETER Action
+Completed action name (required for submit-step-result), e.g. agent_generate_requirement_intent
+
+.PARAMETER ArtifactType
+Artifact type (required for submit-step-result), e.g. RequirementIntent
+
+.PARAMETER ArtifactFile
+Path to JSON file containing artifact (required for submit-step-result)
+
+.PARAMETER Project
+Project name (optional for start-session)
+
+.EXAMPLE
+# Start a planning session
+.\harness\invoke-harness-control-plane.ps1 start-session -RawTask "Fix fluid name sync in ReservoirMapping"
+
+.EXAMPLE
+# Submit a completed artifact
+.\harness\invoke-harness-control-plane.ps1 submit-step-result `
+    -SessionId "sess-xyz" `
+    -Action "agent_generate_requirement_intent" `
+    -ArtifactType "RequirementIntent" `
+    -ArtifactFile "requirement_intent.json"
+
+.IMPORTANT
+When harness returns nextAction: agent_call_mcp_*, you MUST initialize the MCP protocol before calling tools.
+See: harness/agent-rules/03-harness-mcp-tool-calling.mdc (Critical initialization code at top)
+
+.EXIT_CODES
+0 = success
+1 = error (see stderr and/or JSON response for details)
+
+.ENVIRONMENT
+HARNESS_EXE_PATH - Override the control-plane executable path
+#>
+
 # invoke-harness-control-plane.ps1
 # The ONLY supported entrypoint for the Harness Control-Plane protocol.
 #
 # COMMANDS
 #   start-session
-#       --raw-task <string>        Raw task description (required)
-#       --project  <string>        Project name (optional)
+#       -RawTask <string>        Raw task description (required)
+#       -Project <string>        Project name (optional)
 #
 #   submit-step-result
-#       --session-id    <string>   Session identifier returned by start-session (required)
-#       --action        <string>   Completed action name, e.g. agent_generate_requirement_intent (required)
-#       --artifact-type <string>   Artifact type, e.g. RequirementIntent (required)
-#       --artifact-file <string>   Path to JSON file containing the artifact (required)
+#       -SessionId    <string>   Session identifier returned by start-session (required)
+#       -Action       <string>   Completed action name, e.g. agent_generate_requirement_intent (required)
+#       -ArtifactType <string>   Artifact type, e.g. RequirementIntent (required)
+#       -ArtifactFile <string>   Path to JSON file containing the artifact (required)
 #
 #   get-next-step
-#       --session-id    <string>   Session identifier (required)
+#       -SessionId    <string>   Session identifier (required)
 #
 #   get-session-status
-#       --session-id    <string>   Session identifier (required)
+#       -SessionId    <string>   Session identifier (required)
 #
 #   cancel-session
-#       --session-id    <string>   Session identifier (required)
+#       -SessionId    <string>   Session identifier (required)
+#
+# ⚠️  MCP INITIALIZATION REQUIRED
+# When harness returns nextAction: agent_call_mcp_*, you MUST:
+# 1. Initialize MCP protocol (see harness/agent-rules/03-harness-mcp-tool-calling.mdc)
+# 2. Send initialize request
+# 3. Send initialized notification
+# 4. Only THEN call tools/call
 #
 # EXIT CODES
 #   0   success

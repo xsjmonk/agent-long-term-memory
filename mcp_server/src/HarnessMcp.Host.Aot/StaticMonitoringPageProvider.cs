@@ -59,29 +59,18 @@ public static class StaticMonitoringPageProvider
   const statusEl = document.getElementById('status');
   const cap = (s) => (!s ? '' : (s.length > {{preview}} ? s.slice(0, {{preview}}) + '…' : s));
 
-  // Convert a UTC timestamp (ISO string or ms) to the user's local time.
-  function formatLocalTime(v) {
-    if (v === null || v === undefined) return '';
-    if (typeof v === 'number') {
-      const d = new Date(v);
-      return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString();
-    }
-    if (typeof v === 'string') {
-      const t = v.trim();
-      if (!t) return '';
-
-      // If it's a numeric string, treat it as epoch-millis.
-      if (/^-?\d+(\.\d+)?$/.test(t)) {
-        const d = new Date(Number(t));
-        return Number.isNaN(d.getTime()) ? t : d.toLocaleString();
-      }
-
-      const ms = Date.parse(t);
-      if (Number.isFinite(ms)) return new Date(ms).toLocaleString();
-      return t;
-    }
-
-    return String(v);
+  // Show a UTC timestamp as local PC time.
+  // Uses Intl.DateTimeFormat without a timeZone override so it always
+  // resolves to the local PC clock — never UTC display.
+  function formatTime(v) {
+    if (v == null) return '';
+    const ms = typeof v === 'number' ? v : Date.parse(String(v).trim());
+    if (!Number.isFinite(ms)) return String(v ?? '');
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).format(new Date(ms));
   }
 
   function setFontSizePx(px) {
@@ -118,10 +107,11 @@ public static class StaticMonitoringPageProvider
 
   function scrollPanelToBottom(tbody) {
     // Each panel uses `.table-wrap { overflow: auto; }`, so scroll that container—not the window.
+    // Defer to next animation frame so the newly appended row is in the DOM before we measure.
     if (!tbody) return;
     const wrap = tbody.closest('.table-wrap');
     if (!wrap) return;
-    wrap.scrollTop = wrap.scrollHeight;
+    requestAnimationFrame(() => { wrap.scrollTop = wrap.scrollHeight; });
   }
 
   function appendRowScroll(tbody, cells, maxRows) {
@@ -170,7 +160,7 @@ public static class StaticMonitoringPageProvider
     const mcpOps = recentOps;
     const retrievalOps = recentOps.filter(x => retrievalTools.has(x.toolName));
     fillEvents('tbl-mcp', mcpOps, it => [
-      formatLocalTime(it.timestampUtc),
+      formatTime(it.timestampUtc),
       it.requestId || '',
       it.toolName || '',
       it.taskId || '',
@@ -178,7 +168,7 @@ public static class StaticMonitoringPageProvider
       cap(it.summary)
     ]);
     fillEvents('tbl-retrieval', retrievalOps, it => [
-      formatLocalTime(it.timestampUtc),
+      formatTime(it.timestampUtc),
       it.requestId || '',
       it.toolName || '',
       it.taskId || '',
@@ -189,20 +179,20 @@ public static class StaticMonitoringPageProvider
     const lg = document.getElementById('tbl-logs');
     lg.innerHTML = '';
     for (const it of (s.recentLogs||[])) {
-      appendRow(lg, [formatLocalTime(it.timestampUtc), it.level || '', it.toolName || '', cap(it.summary)], MAX_ROWS);
+      appendRow(lg, [formatTime(it.timestampUtc), it.level || '', it.toolName || '', cap(it.summary)], MAX_ROWS);
     }
 
     const tg = document.getElementById('tbl-timings');
     tg.innerHTML = '';
-    for (const it of (s.recentTimings||[])) appendRow(tg, [formatLocalTime(it.timestampUtc), String(it.eventKind), it.toolName || '', '0', cap(it.summary)], MAX_ROWS);
+    for (const it of (s.recentTimings||[])) appendRow(tg, [formatTime(it.timestampUtc), String(it.eventKind), it.toolName || '', '0', cap(it.summary)], MAX_ROWS);
 
     const og = document.getElementById('tbl-out');
     og.innerHTML = '';
-    for (const it of (s.recentOutputs||[])) appendRow(og, [formatLocalTime(it.timestampUtc), it.toolName || '', cap(it.payloadPreviewJson || it.summary || '')], MAX_ROWS);
+    for (const it of (s.recentOutputs||[])) appendRow(og, [formatTime(it.timestampUtc), it.toolName || '', cap(it.payloadPreviewJson || it.summary || '')], MAX_ROWS);
 
     const wg = document.getElementById('tbl-warn');
     wg.innerHTML = '';
-    for (const it of (s.recentWarnings||[])) appendRow(wg, [formatLocalTime(it.timestampUtc), it.level || '', cap(it.summary), cap(it.payloadPreviewJson || '')], MAX_ROWS);
+    for (const it of (s.recentWarnings||[])) appendRow(wg, [formatTime(it.timestampUtc), it.level || '', cap(it.summary), cap(it.payloadPreviewJson || '')], MAX_ROWS);
 
     window.__lastSeq = s.lastSequence || 0;
   }
@@ -251,25 +241,25 @@ public static class StaticMonitoringPageProvider
     };
     const id = toId(kind);
 
-    if (id === 0) appendRowScroll(document.getElementById('tbl-logs'), [formatLocalTime(e.timestampUtc), e.level || 'Info', e.toolName || 'log', cap(e.summary)], MAX_ROWS);
+    if (id === 0) appendRowScroll(document.getElementById('tbl-logs'), [formatTime(e.timestampUtc), e.level || 'Info', e.toolName || 'log', cap(e.summary)], MAX_ROWS);
 
     if (id === 1 || id === 2 || id === 3) {
-      appendRowScroll(document.getElementById('tbl-mcp'), [formatLocalTime(e.timestampUtc), e.requestId || '', e.toolName || '', e.taskId || '', String(kind), cap(e.summary)], MAX_ROWS);
+      appendRowScroll(document.getElementById('tbl-mcp'), [formatTime(e.timestampUtc), e.requestId || '', e.toolName || '', e.taskId || '', String(kind), cap(e.summary)], MAX_ROWS);
       if (e.toolName === 'retrieve_memory_by_chunks' || e.toolName === 'merge_retrieval_results' || e.toolName === 'build_memory_context_pack') {
-        if (id === 2) appendRowScroll(document.getElementById('tbl-retrieval'), [formatLocalTime(e.timestampUtc), e.requestId || '', e.toolName || '', e.taskId || '', 'retrieval', cap(e.summary)], MAX_ROWS);
+        if (id === 2) appendRowScroll(document.getElementById('tbl-retrieval'), [formatTime(e.timestampUtc), e.requestId || '', e.toolName || '', e.taskId || '', 'retrieval', cap(e.summary)], MAX_ROWS);
       }
     }
 
     if (id === 4 || id === 5 || id === 6 || id === 7) {
-      appendRowScroll(document.getElementById('tbl-timings'), [formatLocalTime(e.timestampUtc), String(kind), e.toolName || '', '0', cap(e.summary)], MAX_ROWS);
+      appendRowScroll(document.getElementById('tbl-timings'), [formatTime(e.timestampUtc), String(kind), e.toolName || '', '0', cap(e.summary)], MAX_ROWS);
     }
 
     if (id === 8 || id === 3 || id === 9) {
-      appendRowScroll(document.getElementById('tbl-warn'), [formatLocalTime(e.timestampUtc), e.level || 'Warning', cap(e.summary), cap(e.payloadPreviewJson || '')], MAX_ROWS);
+      appendRowScroll(document.getElementById('tbl-warn'), [formatTime(e.timestampUtc), e.level || 'Warning', cap(e.summary), cap(e.payloadPreviewJson || '')], MAX_ROWS);
     }
 
     if (id === 2 && e.payloadPreviewJson) {
-      appendRowScroll(document.getElementById('tbl-out'), [formatLocalTime(e.timestampUtc), e.toolName || '', cap(e.payloadPreviewJson)], MAX_ROWS);
+      appendRowScroll(document.getElementById('tbl-out'), [formatTime(e.timestampUtc), e.toolName || '', cap(e.payloadPreviewJson)], MAX_ROWS);
     }
   }
 

@@ -326,6 +326,61 @@ public class HarnessStateMachine
             }
         }
 
+        // Converts RequirementIntent artifact (snake_case) to MCP camelCase format.
+        static void WriteMcpRequirementIntent(Utf8JsonWriter w, JsonElement? ri)
+        {
+            if (ri is null) { w.WriteNullValue(); return; }
+            var el = ri.Value;
+            w.WriteStartObject();
+            w.WriteString("taskType", el.TryGetProperty("task_type", out var tt) ? tt.GetString() : null);
+            w.WriteNull("domain");
+            w.WriteNull("module");
+            w.WriteNull("feature");
+            w.WritePropertyName("hardConstraints");
+            if (el.TryGetProperty("hard_constraints", out var hc))
+                hc.WriteTo(w);
+            else
+            { w.WriteStartArray(); w.WriteEndArray(); }
+            w.WritePropertyName("riskSignals");
+            if (el.TryGetProperty("risk_signals", out var rs))
+                rs.WriteTo(w);
+            else
+            { w.WriteStartArray(); w.WriteEndArray(); }
+            w.WriteEndObject();
+        }
+
+        // Converts RetrievalChunkSet chunks to MCP retrievalChunks array with integer chunkType.
+        static void WriteMcpRetrievalChunks(Utf8JsonWriter w, JsonElement? chunkSet)
+        {
+            var chunkTypeMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["core_task"]    = 0,
+                ["constraint"]   = 1,
+                ["risk"]         = 2,
+                ["pattern"]      = 3,
+                ["similar_case"] = 4,
+            };
+
+            w.WriteStartArray();
+            if (chunkSet is null) { w.WriteEndArray(); return; }
+
+            var chunks = chunkSet.Value.TryGetProperty("chunks", out var c) ? c : default;
+            if (chunks.ValueKind != JsonValueKind.Array) { w.WriteEndArray(); return; }
+
+            foreach (var chunk in chunks.EnumerateArray())
+            {
+                w.WriteStartObject();
+                w.WriteString("chunkId", chunk.TryGetProperty("chunk_id", out var id) ? id.GetString() : null);
+                var typeStr = chunk.TryGetProperty("chunk_type", out var ct) ? ct.GetString() ?? "" : "";
+                w.WriteNumber("chunkType", chunkTypeMap.GetValueOrDefault(typeStr, 0));
+                w.WriteString("text", chunk.TryGetProperty("text", out var tx) ? tx.GetString() : null);
+                w.WriteNull("structuredScopes");
+                w.WriteNull("taskShape");
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+        }
+
         return stage switch
         {
             HarnessStage.NeedRequirementIntent => (
@@ -373,16 +428,16 @@ public class HarnessStateMachine
                     w.WriteString("requestId", session.SessionId + "-retrieve");
                     w.WriteString("taskId", session.TaskId);
                     w.WritePropertyName("requirementIntent");
-                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                    WriteMcpRequirementIntent(w, session.AcceptedRequirementIntent);
                     w.WritePropertyName("retrievalChunks");
-                    WriteJsonElement(w, session.AcceptedRetrievalChunkSet);
+                    WriteMcpRetrievalChunks(w, session.AcceptedRetrievalChunkSet);
 
-                    w.WritePropertyName("search_profile");
+                    w.WritePropertyName("searchProfile");
                     w.WriteStartObject();
-                    w.WriteBoolean("active_only", true);
-                    w.WriteString("minimum_authority", "reviewed");
-                    w.WriteNumber("max_items_per_chunk", 5);
-                    w.WriteBoolean("require_type_separation", true);
+                    w.WriteBoolean("activeOnly", true);
+                    w.WriteNumber("minimumAuthority", 1);
+                    w.WriteNumber("maxItemsPerChunk", 5);
+                    w.WriteBoolean("requireTypeSeparation", true);
                     w.WriteEndObject();
 
                     w.WriteEndObject();
@@ -418,7 +473,7 @@ public class HarnessStateMachine
                     w.WriteString("requestId", session.SessionId + "-contextpack");
                     w.WriteString("taskId", session.TaskId);
                     w.WritePropertyName("requirementIntent");
-                    WriteJsonElement(w, session.AcceptedRequirementIntent);
+                    WriteMcpRequirementIntent(w, session.AcceptedRequirementIntent);
                     w.WritePropertyName("retrieved");
                     WriteJsonElement(w, session.AcceptedRetrieveMemoryByChunksResponse);
                     w.WritePropertyName("merged");

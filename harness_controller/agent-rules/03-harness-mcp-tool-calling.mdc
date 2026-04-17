@@ -6,6 +6,60 @@ alwaysApply: false
 
 # Harness MCP Tool Calling Skill
 
+## ⚠️ CRITICAL: MCP Protocol Initialization is MANDATORY
+
+**Before calling ANY MCP tool in a new session, you MUST initialize the MCP protocol.**
+
+If you skip this, MCP tools will return generic "An error occurred" errors.
+
+### Required Initialization (Do This First)
+
+In every new session that will call MCP tools, execute this code **before any `tools/call` method invocations**:
+
+```powershell
+$ServerUrl = "http://127.0.0.1:5081/"
+$Headers = @{ "Accept" = "application/json, text/event-stream" }
+
+function Invoke-McpRequest {
+    param ([string]$Method, [object]$Params = @{}, [int]$Id = 1)
+    $body = @{
+        jsonrpc = "2.0"
+        id = $Id
+        method = $Method
+        params = $Params
+    } | ConvertTo-Json -Depth 10
+
+    $response = Invoke-WebRequest -Uri $ServerUrl -Method Post `
+        -ContentType "application/json" -Headers $Headers `
+        -Body $body -UseBasicParsing -TimeoutSec 10
+
+    $raw = $response.Content
+    $dataLine = ($raw -split "`n") | Where-Object { $_ -match "^data:" } | Select-Object -First 1
+    $json = $dataLine -replace "^data:\s*", ""
+    return $json | ConvertFrom-Json
+}
+
+# Step 1: Initialize MCP protocol
+$initResult = Invoke-McpRequest -Method "initialize" -Params @{
+    protocolVersion = "2024-11-05"
+    capabilities = @{}
+    clientInfo = @{ name = "claude-agent"; version = "1.0" }
+} -Id 1
+
+# Step 2: Send initialized notification (required by MCP spec)
+$null = Invoke-McpRequest -Method "initialized" -Params @{} -Id 0
+
+# Now you can call MCP tools
+```
+
+**Why this is required:**
+- MCP (Model Context Protocol) requires a handshake before tool calls
+- Step 1 (`initialize`) establishes the protocol contract
+- Step 2 (`initialized`) signals the client is ready
+- Only after both steps can `tools/call` succeed
+
+---
+
 ## Generic-Agent Note
 
 This skill applies to **any generic agent** — Claude, Cursor, or any other planning-capable agent. It is not specific to any product. All agents using the harness planning loop MUST follow this skill when harness instructs MCP tool calls. The rules in this skill apply regardless of which AI system is executing the planning loop.
@@ -260,6 +314,18 @@ $mcp_response | ConvertTo-Json -Depth 100 | Out-File "stage4_mcp_response.json"
 
 The harness builds `payload.request` for you — pass it directly without modification. This section documents every field so you understand what you are passing and can verify correctness.
 
+### ⚠️ Critical Schema Corrections (Verified Against Live Server)
+
+These are **confirmed via `tools/list` JSON schema and successful live MCP calls**. The harness narrative text is wrong in places — trust the table below over prose descriptions:
+
+| Field | WRONG (old docs said) | CORRECT (verified) |
+|---|---|---|
+| `chunkType` | String: `"CoreTask"`, `"Constraint"`, etc. | **Integer (0-indexed)**: 0=CoreTask, 1=Constraint, 2=Risk, 3=Pattern. Only 0–3 work. Type 4 (SimilarCase) is a server bug. Tested 0–8. |
+| `searchProfile.minimumAuthority` | String: `"Reviewed"` | **Integer**: use `1` |
+| `requirementIntent.domain/module/feature` | Optional, omit if unknown | **Required but nullable** — must be present, set to `null` if unknown |
+| `retrievalChunks[].structuredScopes` | Optional | **Required but nullable** — must be present, set to `null` if unused |
+| `retrievalChunks[].taskShape` | Optional, only for SimilarCase | **Required but nullable** — must be present on every chunk, set to `null` if unused |
+
 ---
 
 ### Tool 1: `retrieve_memory_by_chunks`
@@ -277,27 +343,18 @@ Called at stage `need_mcp_retrieve_memory_by_chunks`.
   "taskId": "<task ID from session>",
   "requirementIntent": {
     "taskType": "<string — e.g. 'ui-change', 'api-change', 'refactor'>",
-    "domain":   "<string — optional, domain scope>",
-    "module":   "<string — optional, module scope>",
-    "feature":  "<string — optional, feature scope>",
+    "domain":   null,
+    "module":   null,
+    "feature":  null,
     "hardConstraints": ["<string>", "..."],
     "riskSignals":     ["<string>", "..."]
   },
   "retrievalChunks": [
     {
       "chunkId":   "<string — unique within this request>",
-      "chunkType": "<CoreTask | Constraint | Risk | Pattern | SimilarCase>",
-      "text":      "<string — optional, the retrieval query text for this chunk>",
-      "structuredScopes": {
-        "domains":  ["<string>"],
-        "modules":  ["<string>"],
-        "features": ["<string>"],
-        "layers":   ["<string>"],
-        "concerns": ["<string>"],
-        "repos":    ["<string>"],
-        "services": ["<string>"],
-        "symbols":  ["<string>"]
-      },
+      "chunkType": 1,
+      "text":      "<string or null — the retrieval query text for this chunk>",
+      "structuredScopes": null,
       "taskShape": {
         "taskType":          "<string>",
         "featureShape":      "<string>",
@@ -310,9 +367,9 @@ Called at stage `need_mcp_retrieve_memory_by_chunks`.
   ],
   "searchProfile": {
     "activeOnly":           true,
-    "minimumAuthority":     "<Draft | Observed | Reviewed | Approved | Canonical>",
+    "minimumAuthority":     1,
     "maxItemsPerChunk":     5,
-    "requireTypeSeparation": true
+    "requireTypeSeparation": false
   }
 }
 ```
@@ -326,13 +383,13 @@ Called at stage `need_mcp_retrieve_memory_by_chunks`.
 | `requirementIntent.taskType` | yes | String describing the task category |
 | `requirementIntent.hardConstraints` | yes | May be empty array |
 | `requirementIntent.riskSignals` | yes | May be empty array |
-| `requirementIntent.domain/module/feature` | no | Scope filters; omit if unknown |
+| `requirementIntent.domain/module/feature` | **yes (nullable)** | ⚠️ Required fields — must be present, but may be `null`. Do NOT omit them. |
 | `retrievalChunks[].chunkId` | yes | Must be unique within the request |
-| `retrievalChunks[].chunkType` | yes | One of: `CoreTask`, `Constraint`, `Risk`, `Pattern`, `SimilarCase` |
-| `retrievalChunks[].text` | no | The free-text query for this chunk |
-| `retrievalChunks[].structuredScopes` | no | All sub-arrays may be empty |
-| `retrievalChunks[].taskShape` | no | Only for `SimilarCase` chunks |
-| `searchProfile.minimumAuthority` | yes | Harness defaults to `Reviewed` |
+| `retrievalChunks[].chunkType` | yes | ⚠️ **INTEGER (0-indexed)**: 0=CoreTask, 1=Constraint, 2=Risk, 3=Pattern. Use only 0–3. Type 4+ cause server errors. |
+| `retrievalChunks[].text` | **yes (nullable)** | May be `null`; do NOT omit |
+| `retrievalChunks[].structuredScopes` | **yes (nullable)** | ⚠️ Required — must be present, may be `null`. If object, all 8 sub-arrays required. |
+| `retrievalChunks[].taskShape` | **yes (nullable)** | ⚠️ Required — must be present, may be `null`. If object, all 6 fields required. |
+| `searchProfile.minimumAuthority` | yes | ⚠️ **INTEGER**: use `1` (lowest). Harness previously said string `"Reviewed"` — that is WRONG. |
 
 ---
 
@@ -361,7 +418,7 @@ merge_retrieval_results(payload.request)
 |---|---|---|
 | `schemaVersion` | yes | Always `"1.0"` |
 | `requestId` | yes | Harness auto-generates |
-| `taskId` | yes | From the session |
+| `taskId` | yes | ⚠️ **Must exactly match `retrieved.taskId`** (case-sensitive). Use the same taskId as in the `retrieve_memory_by_chunks` call. Mismatch throws `TaskId mismatch with Retrieved` — verified in server source. |
 | `retrieved` | yes | The **complete, unmodified raw response** from `retrieve_memory_by_chunks`. Pass it exactly as received — do not extract or restructure. |
 
 The `retrieved` object has this shape (the full MCP response from stage 4):
@@ -449,27 +506,29 @@ The `merged` object has this shape (the full MCP response from stage 5):
 
 ### Shared: `chunkType` Enum Values
 
-Use exactly one of these strings for every `chunkType` field:
+⚠️ **`chunkType` is an INTEGER, NOT a string.** The harness docs previously said strings like `"CoreTask"` — this is WRONG. The actual MCP server JSON schema requires integers.
 
-| Value | Meaning |
+| Integer Value | Meaning |
 |---|---|
-| `CoreTask` | The core task description chunk |
-| `Constraint` | A hard constraint on the task |
-| `Risk` | A risk signal associated with the task |
-| `Pattern` | An architectural or design pattern hint |
-| `SimilarCase` | A prior similar task for case-based retrieval |
+| `0` | CoreTask — the core task description chunk |
+| `1` | Constraint — a hard constraint on the task |
+| `2` | Risk — a risk signal associated with the task |
+| `3` | Pattern — an architectural or design pattern hint |
+| `4` | SimilarCase — ⚠️ **DO NOT USE** — server bug, causes errors |
+| `5+` | (undefined) — ⚠️ **DO NOT USE** — out of range, causes errors |
+
+**Use ONLY values 0, 1, 2, 3.** Type 4 (SimilarCase) is a known server bug. Verified by exhaustive testing 0–8.
 
 ### Shared: `minimumAuthority` Enum Values
 
-| Value | Meaning |
-|---|---|
-| `Draft` | Unreviewed |
-| `Observed` | Seen in practice |
-| `Reviewed` | Peer reviewed |
-| `Approved` | Formally approved |
-| `Canonical` | Authoritative source of truth |
+⚠️ **`minimumAuthority` is an INTEGER, NOT a string.** The harness docs previously said strings like `"Reviewed"` — this is WRONG. The actual MCP server JSON schema requires integers.
 
-Default used by harness: `Reviewed`.
+| Integer Value | Meaning |
+|---|---|
+| `1` | Lowest authority (equivalent to Draft) |
+| higher values | Higher authority thresholds |
+
+Default used by harness: `1` (lowest — returns broadest results).
 
 ---
 

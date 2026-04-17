@@ -392,26 +392,14 @@ This skill provides **complete, correct, detailed schemas** for every artifact t
 
 ```json
 {
-  "validation_summary": "Overall assessment of chunk quality and coverage",
-  "chunk_assessments": [
-    {
-      "chunk_id": "c1",
-      "relevance": "high|medium|low",
-      "reason": "Why this relevance rating"
-    }
-  ],
-  "overall_coverage_adequate": true|false,
-  "gaps_identified": [
-    "Gap 1 description",
-    "Gap 2 description"
-  ],
+  "isValid": true,
   "errors": [],
   "warnings": [],
-  "has_core_task": true|false,
-  "has_constraint": true|false,
-  "has_risk": true|false,
-  "has_pattern": false|true,
-  "has_similar_case": true|false
+  "has_core_task": true,
+  "has_constraint": true,
+  "has_risk": true,
+  "has_pattern": false,
+  "has_similar_case": false
 }
 ```
 
@@ -419,55 +407,20 @@ This skill provides **complete, correct, detailed schemas** for every artifact t
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
-| `validation_summary` | YES | string | 1–2 sentence summary of overall chunk quality |
-| `chunk_assessments` | YES | array | Assessment for each chunk in the RetrievalChunkSet |
-| `chunk_assessments[].chunk_id` | YES | string | Must match a chunk_id from RetrievalChunkSet |
-| `chunk_assessments[].relevance` | YES | enum | One of: `high`, `medium`, `low` — not other variants |
-| `chunk_assessments[].reason` | YES | string | Why you assigned this relevance rating |
-| `overall_coverage_adequate` | YES | boolean | `true` if coverage is sufficient, `false` if gaps remain |
-| `gaps_identified` | YES | array | List of identified gaps. Empty `[]` if coverage is adequate. |
-| `errors` | YES | array | List of validation errors (e.g., "core_task missing", "constraint_chunk_missing_but_hard_constraints_non_empty"). Empty `[]` if no errors. |
-| `warnings` | YES | array | List of warnings (e.g., "similar_case chunk text is vague"). Empty `[]` if no warnings. |
-| `has_core_task` | YES | boolean | Must be `true` — core_task is always required |
-| `has_constraint` | YES | boolean | `true` if constraint chunk exists, `false` otherwise |
-| `has_risk` | YES | boolean | `true` if risk chunk exists, `false` otherwise |
-| `has_pattern` | YES | boolean | `true` if pattern chunk exists, `false` otherwise |
-| `has_similar_case` | YES | boolean | `true` if similar_case chunk exists, `false` otherwise |
+| `isValid` | YES | boolean | ⚠️ **This is the required key field** — `true` if all chunks passed validation, `false` if errors. NOT `overall_coverage_adequate`. |
+| `errors` | YES | array | Validation errors (e.g., "core_task missing"). Empty `[]` if no errors. |
+| `warnings` | YES | array | Validation warnings. Empty `[]` if no warnings. |
+| `has_core_task` | YES | boolean | `true` if core_task chunk present |
+| `has_constraint` | YES | boolean | `true` if constraint chunk present |
+| `has_risk` | YES | boolean | `true` if risk chunk present |
+| `has_pattern` | YES | boolean | `true` if pattern chunk present |
+| `has_similar_case` | YES | boolean | `true` if similar_case chunk present |
 
 ### Example
 
 ```json
 {
-  "validation_summary": "RetrievalChunkSet covers core task, constraints, risks, and includes similar_case for medium complexity. All required coverage rules met.",
-  "chunk_assessments": [
-    {
-      "chunk_id": "c1",
-      "relevance": "high",
-      "reason": "Core task description clearly states JWT auth requirement and zero-downtime constraint"
-    },
-    {
-      "chunk_id": "c2",
-      "relevance": "high",
-      "reason": "Constraint chunk directly addresses hard constraints from RequirementIntent"
-    },
-    {
-      "chunk_id": "c3",
-      "relevance": "high",
-      "reason": "Risk chunk maps to risk_signals from RequirementIntent"
-    },
-    {
-      "chunk_id": "c4",
-      "relevance": "medium",
-      "reason": "Pattern chunk provides useful context but somewhat general"
-    },
-    {
-      "chunk_id": "c5",
-      "relevance": "high",
-      "reason": "Similar_case chunk has task_shape; will help find precedents"
-    }
-  ],
-  "overall_coverage_adequate": true,
-  "gaps_identified": [],
+  "isValid": true,
   "errors": [],
   "warnings": [],
   "has_core_task": true,
@@ -501,29 +454,26 @@ When validating:
 
 ### Common Mistakes (AVOID THESE)
 
-❌ **MISTAKE: Missing boolean flags**
+❌ **MISTAKE: Using `overall_coverage_adequate` instead of `isValid`**
 ```json
 {
-  "validation_summary": "...",
-  "chunk_assessments": [...],
-  "overall_coverage_adequate": true
-  // Missing: errors, warnings, has_core_task, has_constraint, etc.
+  "overall_coverage_adequate": true,  // ← WRONG field name — harness rejects with "isValid field is required"
+  "errors": [],
+  "warnings": [],
+  "has_core_task": true
 }
 ```
-**FIX:** Include all required fields:
+**FIX:** Use `isValid`:
 ```json
 {
-  "validation_summary": "...",
-  "chunk_assessments": [...],
-  "overall_coverage_adequate": true,
-  "gaps_identified": [],
+  "isValid": true,    // ✓ CORRECT
   "errors": [],
   "warnings": [],
   "has_core_task": true,
   "has_constraint": true,
   "has_risk": true,
   "has_pattern": false,
-  "has_similar_case": true
+  "has_similar_case": false
 }
 ```
 
