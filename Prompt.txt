@@ -1,13 +1,10 @@
 I run claude agent in `C:\Docs\Repo\github\pipesim\pip-pipesim\Stingray\`. It does not see harness control flow at all. Fix it
 
-The agent gets this error
-```
-Session went into error state. Since I'm having trouble with the harness schema requirements and the planning is taking longer than needed, let me provide you with a direct plan based on my analysis of the code. I'll write the plan directly in the designated folder:
-```
 
-Mostly it is missing scheme for retrieval chunk set. 
+Do this way to give a fix. You should give detailed guide in skills to guide agent how to call the tools such as mcp and `c:\Docs\Hackthon\2026\harness_controller\Scripts\invoke-harness-control-plane.ps1`
+The way how you can figure out the fixes needed:
 
-Do this way to give a fix. Assume you are a planner agent in `C:\Docs\Repo\github\pipesim\pip-pipesim\Stingray\`. You will do the harness control planning. You read all skills and call harness for the flow
+Assume you are a planner agent in `C:\Docs\Repo\github\pipesim\pip-pipesim\Stingray\`. You will do the harness control planning. You read all skills and call harness for the flow
 
 The planner agent plans this:
 ```
@@ -25,14 +22,10 @@ Plan
 Plan the change and tests
 ```
 
-In the harness control, planner agent will find bugs and be blocked. Now a bug fixing agent can fix them in `c:\Docs\Hackthon\2026\harness\`. 
-When planner agent gets any problem with scheme things, the bug fixing agent should fix it.
+In the harness control, planner agent will find bugs and be blocked. Now a bug fixing agent can fix them in `c:\Docs\Hackthon\2026\harness_controller\`. 
+When planner agent gets any problem, the bug fixing agent should fix it. the bug fixing agent should place the fix in `c:\Docs\Hackthon\2026\harness_controller\` or subfolders to record what has been imrpoved.
 
-Then continue your planner agent to continue the flow until the plan is made
+Then planner agent continues the flow until the plan is made
 
-Additional information: 
-mcp server is `http://127.0.0.1:5081/`
-`c:\Docs\Hackthon\2026\mcp_server\Scripts\test_mcp_tools.ps1` can give you infromation how to call mcp server.
-
-An agent does not know how to call it. You should create skills for this to guide how to use each tool with all details.
+In the end, the bug fixing agent should give a consolidated fix so that the flow for the planner does not block
 
